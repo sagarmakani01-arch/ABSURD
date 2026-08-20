@@ -1,16 +1,21 @@
-# GENESIS — System Architecture
+# ABSURD — System Architecture
+
+> **Status note (Phase 11):** this document is the target/design spec. The
+> implemented matrix is in `README.md`. The tool generator, security sandbox,
+> and real tool execution are **not implemented**; their contracts exist and
+> every API surface for them returns structured "not implemented" responses.
 
 ## 1. Overview
 
-GENESIS is a self-evolving AI agent platform. It combines a React + TypeScript frontend, a FastAPI gateway, an agent engine, a tool system with dynamic tool generation, a multi-tier memory system, and an evolution loop that turns execution outcomes into improved capabilities.
+ABSURD is a self-evolving AI agent platform. It combines a React + TypeScript frontend, a FastAPI gateway, an agent engine, a tool system with dynamic tool generation, a multi-tier memory system, and an evolution loop that turns execution outcomes into improved capabilities.
 
-The defining property of GENESIS is the **Evolution Loop**: tools that succeed are registered into the system's permanent capabilities; tools that fail are analyzed and fed back into the reasoner/planner so the next attempt is better.
+The defining property of ABSURD is the **Evolution Loop**: tools that succeed are registered into the system's permanent capabilities; tools that fail are analyzed and fed back into the reasoner/planner so the next attempt is better.
 
 ## 2. System Context
 
 ```
                          ┌─────────────────────────┐
-                         │       GENESIS UI        │
+                         │       ABSURD UI        │
                          │ React + TypeScript      │
                          │ Landing / Dashboard     │
                          └────────────┬────────────┘
@@ -65,7 +70,7 @@ The defining property of GENESIS is the **Evolution Loop**: tools that succeed a
 
 | Component | Responsibility |
 |---|---|
-| GENESIS UI | Landing page, dashboard, live run monitoring via WebSocket, REST-driven CRUD for tools/memories/agents. |
+| ABSURD UI | Landing page, dashboard, live run monitoring via WebSocket, REST-driven CRUD for tools/memories/agents. |
 | API Gateway | Single entry point. REST for synchronous ops, WebSocket for streaming/events. Auth, routing, validation, fan-out. |
 | Agent Engine | Decomposes goals into plans (`Planner`), detects which capabilities exist (`Capability Detector`), reasons over results (`Reasoner`). |
 | Tool System | Registry of known/generated tools; `Tool Generator` synthesizes new tools for gaps; sandboxed execution. |
@@ -95,28 +100,40 @@ The defining property of GENESIS is the **Evolution Loop**: tools that succeed a
 
 ## 6. Communication Contracts
 
-- **REST**: `POST /tasks`, `GET /tasks/{id}`, `GET /tools`, `GET /agents`, `GET /memories`, `GET /evolution/events` (full list in `api-gateway.md`).
+- **REST**: `POST /tasks`, `GET /tasks/{id}`, `GET /tools`, `POST /evaluations`,
+  `GET /memory/experience`, `GET /memory/graph`, `GET /memory/graph/coverage-gaps`,
+  `GET /memory/tools-usage`, `GET /evolution/metrics`,
+  `POST /evolution/revisions`, `POST /evolution/promotions`,
+  `GET /evolution/events`, `GET /events` (full list in `api-gateway.md`).
 - **WebSocket** `/ws`: client→server `task.create`, `task.cancel`; server→client `task.update`, `tool.registered`, `evolution.event`, `error`.
 - All payloads are JSON. All REST bodies validated via Pydantic schemas. WS events carry a `type` + `payload` envelope.
 
-## 7. Directory Layout (Target)
+## 7. Directory Layout
+
+Implemented layout (see also `README.md`):
 
 ```
-apps/
-  ui/                 # React + TypeScript frontend (Vite)
-    src/pages/        # Landing, Dashboard
-    src/ws/           # WebSocket client
-    src/api/          # REST client
-  gateway/            # FastAPI app
-    app/routes/       # REST + WS routers
-    app/schemas/      # Pydantic contracts
-core/
-  agent/              # Planner, CapabilityDetector, Reasoner
-  tools/              # Registry, ToolGenerator, Executor
-  memory/             # tool_memory, experience_memory, knowledge_graph
-  sandbox/            # SecuritySandbox
-  evolution/          # evolution loop handlers
+backend/
+  app/
+    api/routes/          # health, events, tasks, tools, evaluation,
+                         # memory, evolution routers
+    core/agent/          # planner, detector, reasoner, engine
+    core/tools/          # tool model, registry lifecycle
+    services/            # memory stores, event projectors, evolution loop
+    db.py / models.py    # engine, session, SQLAlchemy models
+    main.py              # FastAPI app, WS bridge, projector install
+  tests/                 # pytest suite (43 passing)
+frontend/
+  src/app/               # /app shell, AppLayout
+  src/pages/app/         # Overview, Tools, ToolDetail, Tasks, Experiments,
+                         # Memory, Evaluation, System
+  src/lib/               # api client, hooks, useEventStream
+docs/                    # module specs + architecture audit
 ```
+
+Planned additions from the original design (not yet created): a dedicated
+sandbox module, tool generator, and execution worker — the shapes are specced
+in `tool-system.md`.
 
 ## 8. Reliability & Observability
 

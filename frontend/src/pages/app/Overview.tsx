@@ -1,4 +1,4 @@
-/** /app — main GENESIS environment. */
+/** /app — main ABSURD environment. */
 import { useEventStream } from '../../lib/useEventStream'
 import { useHealth, useTasks, useTools } from '../../api/hooks'
 import { PageHeader, ModulePending } from '../../app/AppUI'

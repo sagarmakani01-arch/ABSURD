@@ -1,4 +1,4 @@
-# GENESIS Agent Engine
+# ABSURD Agent Engine
 
 The Agent Engine is the cognitive core. It turns a high-level goal into a sequence of executable steps, decides whether existing tools can handle them, and reasons over outcomes. It is composed of three components: **Planner**, **Capability Detector**, and **Reasoner**.
 

@@ -1,4 +1,4 @@
-# GENESIS Frontend (UI)
+# ABSURD Frontend (UI)
 
 React + TypeScript landing page and dashboard. Communicates with the API Gateway over REST (synchronous ops) and WebSocket (live events).
 
@@ -17,17 +17,22 @@ React + TypeScript landing page and dashboard. Communicates with the API Gateway
 - Live status strip: single WebSocket light showing gateway health (`/health` poll + WS connect state).
 - Fetches nothing heavy — static content plus health check.
 
-### Dashboard (`/dashboard`)
+### Application shell (`/app`)
 
-- **Agents panel** — list agents, create agent config (`POST /agents`).
-- **Tasks panel** — create task, list tasks (`GET /tasks`), click into task detail with live step stream via WS.
-- **Tools panel** — `GET /tools`, tool detail drawer (schemas, confidence, success rate), disable action.
-- **Memory panel** — `GET /memories/*` query UI for experiences and knowledge graph neighborhood explorer.
-- **Evolution panel** — `GET /evolution/events` + `GET /evolution/metrics`; live event log appended in real time from WS `evolution.event` messages.
+Implemented modules (Phase 5+): Overview, Tools (+ ToolDetail), Tasks,
+Experiments, Memory, Evaluation, System. Live event stream via
+`src/lib/useEventStream.ts` (auto-reconnect, backoff, 25s heartbeat,
+200-event buffer). Tool/Task/Evaluation/Evolution pages wire to
+`src/lib/api` hooks once the corresponding lifecycle surfaces are live.
+
+- **Tasks panel** — create task, list tasks (`GET /tasks`), click into task detail; live step stream from the WS event stream.
+- **Tools panel** — `GET /tools`, tool detail view (schemas, lifecycle state), verify/activate/reject lifecycle actions.
+- **Memory panel** — `GET /memory/experience`, `GET /memory/graph`, `GET /memory/graph/coverage-gaps`, `GET /memory/tools-usage`.
+- **Evolution panel** — `GET /evolution/events` + `GET /evolution/metrics`; live event log from the WS bridge.
 
 ## 3. WebSocket Client
 
-`src/ws/` — typed client hook (`useGenesisSocket`):
+`src/ws/` — typed client hook (`useABSURDSocket`):
 
 - Auto-reconnect with exponential backoff (1s → 30s cap), heartbeat `ping` every 25s.
 - Envelope types shared with the gateway (`src/types/ws.ts`): a discriminated union on `type`.
@@ -71,7 +76,7 @@ src/
   pages/           # Landing.tsx, Dashboard.tsx
   components/      # AgentsPanel, TasksPanel, ToolsPanel, MemoryPanel, EvolutionPanel, StatusLight
   api/             # client.ts (fetch wrapper), tasks.ts, tools.ts, agents.ts, memories.ts, evolution.ts
-  ws/              # socket.ts, useGenesisSocket.ts, subscriptions.ts
+  ws/              # socket.ts, useABSURDSocket.ts, subscriptions.ts
   types/           # ws.ts, api.ts (API DTOs mirroring the gateway's Pydantic schemas)
   lib/             # format.ts (durations, percentages), time.ts
 ```

@@ -1,4 +1,4 @@
-# GENESIS Tool System
+# ABSURD Tool System
 
 The Tool System manages the lifecycle of tools: what exists, how new tools come into existence, and how they are executed safely. Consists of the **Registry**, **Tool Generator**, **Security Sandbox**, and **Tool Execution**.
 

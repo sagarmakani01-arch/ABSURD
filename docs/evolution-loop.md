@@ -1,6 +1,6 @@
-# GENESIS Evolution Loop
+# ABSURD Evolution Loop
 
-The Evolution Loop is what makes GENESIS self-improving. Every tool execution outcome is either **registered** (success) or **analyzed** (failure); both paths write back into memory, which improves the next task's plan, capability coverage, and tool quality.
+The Evolution Loop is what makes ABSURD self-improving. Every tool execution outcome is either **registered** (success) or **analyzed** (failure); both paths write back into memory, which improves the next task's plan, capability coverage, and tool quality.
 
 ```
               TOOL EXECUTION

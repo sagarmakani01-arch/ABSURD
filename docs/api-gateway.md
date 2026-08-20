@@ -1,6 +1,16 @@
-# GENESIS API Gateway
+# ABSURD API Gateway
 
-FastAPI gateway — the only entry point for the GENESIS UI. Exposes synchronous REST endpoints and a WebSocket endpoint for streaming/event delivery. It owns auth, request validation, and fan-out to the Agent Engine, Tool System, Memory System, and Evolution Loop.
+> **Status note (Phase 11):** endpoints below marked *(implemented)* exist in
+> `backend/app/api/routes/`. All others are target spec — the gateway returns
+> 404 until a later phase. Implemented set: `health`, `events`, `tasks`
+> (POST `/tasks`, GET `/tasks`, GET `/tasks/{id}`, GET `/executions`), `tools`
+> (POST `/tools`, GET `/tools`, GET `/tools/{id}`, and the lifecycle verbs
+> `/verify`, `/activate`, `/reject`, `/deprecate`), `evaluations`
+> (POST `/evaluations`), `memory` (`/memory/experience`, `/memory/graph`,
+> `/memory/graph/coverage-gaps`, `/memory/tools-usage`), `evolution`
+> (`metrics`, `events`, `revisions`, `promotions`).
+
+FastAPI gateway — the only entry point for the ABSURD UI. Exposes synchronous REST endpoints and a WebSocket endpoint for streaming/event delivery. It owns auth, request validation, and fan-out to the Agent Engine, Tool System, Memory System, and Evolution Loop.
 
 ## 1. Base URL & Conventions
 
@@ -91,7 +101,7 @@ Every message uses the envelope `{"type": "...", "payload": {...}}`.
 
 ## 4. Authentication
 
-- v1: static bearer token (env `GENESIS_API_TOKEN`), enforced via dependency on every REST route and WS accept.
+- v1: static bearer token (env `ABSURD_API_TOKEN`), enforced via dependency on every REST route and WS accept.
 - Future: JWT with scopes (`task:read`, `task:write`, `tool:admin`, `memory:read`).
 - All auth failures → `401 {"detail": "unauthorized", "code": "auth.unauthorized"}`.
 

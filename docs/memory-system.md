@@ -1,4 +1,4 @@
-# GENESIS Memory System
+# ABSURD Memory System
 
 Three persistent stores that back every other component. Data in all three is written from the same event stream, keeping the stores mutually consistent.
 
