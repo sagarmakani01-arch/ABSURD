@@ -21,7 +21,8 @@ from sqlalchemy.orm import Session
 
 from app.events import EventType, bus
 from app.models import ExecutionRecord, ExperienceRecord, KgEdge, TaskRecord, ToolRecord
-from app.services.generator import AVAILABLE_STRATEGIES, tool_generator
+from app.services.generator import tool_generator
+from app.services.llm import LLMError, llm_service
 from app.services.memory import knowledge_graph
 
 QUARANTINE_THRESHOLD = 3
@@ -107,10 +108,11 @@ class EvolutionService:
     def start_revision(self, session: Session, tool_id: str) -> dict[str, object]:
         """Begin a revision cycle for a REGISTERED tool.
 
-        The cycle is honest about its limits: tool *generation* is the work of
-        the LLM generator (a later phase), so every revision attempt today
-        records `evolution.revision_started`, then `evolution.revision_failed`
-        with the structured reason, and fails closed with a 409.
+        With an LLM transport configured, the revision rewrites the tool from
+        its real execution feedback; on success a `TOOL_REVISION_IMPROVED`
+        event carries the revised candidate. Without a transport the cycle
+        fails closed with 409 and records the structured reason — no fake
+        revisions are ever claimed.
         """
         tool = session.get(ToolRecord, tool_id)
         if tool is None:
@@ -118,17 +120,63 @@ class EvolutionService:
         if tool.status != "REGISTERED":
             raise EvolutionError("illegal_state", f"revisions require a REGISTERED tool, got {tool.status}")
         bus.publish(EventType.TOOL_REVISION_STARTED, {"tool_id": tool.id, "version": tool.version})
-        reason = "revision generation requires the LLM generator (not implemented yet)"
-        bus.publish(EventType.TOOL_REVISION_FAILED, {"tool_id": tool.id, "reason": reason, "version": tool.version})
-        raise EvolutionError("revision_generation_unavailable", reason)
+
+        if not llm_service.available:
+            reason = "revision generation requires an LLM transport (not configured)"
+            bus.publish(
+                EventType.TOOL_REVISION_FAILED,
+                {"tool_id": tool.id, "reason": reason, "version": tool.version},
+            )
+            raise EvolutionError("revision_generation_unavailable", reason)
+
+        feedback = self._recent_failure_feedback(session, tool_id)
+        try:
+            payload = llm_service.revise_tool(tool, feedback)
+        except LLMError as exc:
+            bus.publish(
+                EventType.TOOL_REVISION_FAILED,
+                {
+                    "tool_id": tool.id,
+                    "reason": f"{exc.code}: {exc.message}",
+                    "version": tool.version,
+                },
+            )
+            raise EvolutionError("revision_generation_failed", f"{exc.code}: {exc.message}") from exc
+
+        version = _bump_version(tool.version)
+        bus.publish(
+            EventType.TOOL_REVISION_IMPROVED,
+            {
+                "tool_id": tool.id,
+                "version": version,
+                "source_code": payload["source_code"],
+                "tests": payload["tests"],
+                "description": payload["description"],
+                "strategy": "llm",
+            },
+        )
+        return {"tool_id": tool.id, "version": version, "status": "improved"}
+
+    @staticmethod
+    def _recent_failure_feedback(session: Session, tool_id: str) -> list[str]:
+        rows = session.scalars(
+            select(ExecutionRecord)
+            .where(ExecutionRecord.tool_id == tool_id, ExecutionRecord.status != "COMPLETED")
+            .order_by(ExecutionRecord.started_at.desc())
+            .limit(5)
+        ).all()
+        return [
+            f"{row.status}: {row.error.get('message', '') if row.error else ''}"
+            for row in rows
+        ]
 
     def promote_version(self, session: Session, tool_id: str, version: str) -> ToolRecord:
         """Promote a successfully revised candidate to the registered version.
 
-        A promotion is only lawful when a completed revision exists for the
-        tool (a `TOOL_REVISION_IMPROVED` event). With the generator absent no
-        revision can complete, so real promotions remain impossible — the
-        guard is real and testable regardless.
+        A promotion is only lawful when a `TOOL_REVISION_IMPROVED` event
+        exists for the tool; the revised source/tests travel with that event
+        and are applied on promotion. Without a completed revision the guard
+        fails closed with 409.
         """
         tool = session.get(ToolRecord, tool_id)
         if tool is None:
@@ -137,12 +185,21 @@ class EvolutionService:
             raise EvolutionError("illegal_state", f"promotions require a REGISTERED tool, got {tool.status}")
         if version == tool.version:
             raise EvolutionError("version_unchanged", "promoted version must differ from the current version")
-        if not self._last_improved_revision(tool_id):
+        improved = self._last_improved_revision(tool_id)
+        if improved is None:
             raise EvolutionError(
                 "no_completed_revision",
                 "only revisions that completed successfully can be promoted",
             )
+        previous = tool.version
+        tool.parent_version = previous
         tool.version = version
+        if improved.get("source_code"):
+            tool.source_code = improved["source_code"]
+        if improved.get("tests"):
+            tool.tests = improved["tests"]
+        if improved.get("description"):
+            tool.description = improved["description"]
         tool.updated_at = datetime.now(timezone.utc)
         session.add(tool)
         session.commit()
@@ -213,7 +270,7 @@ class EvolutionService:
             "tools_registered": tools_registered,
             "tools_generated": tools_generated,
             "generation_available": tool_generator.generate_available(),
-            "generation_strategies": list(AVAILABLE_STRATEGIES),
+            "generation_strategies": tool_generator.strategies(),
             "tools_quarantined": tools_quarantined,
             "executions": executions,
             "experiences": experiences,
@@ -221,8 +278,17 @@ class EvolutionService:
             "gap_edges": gap_edges,
             "gap_close_rate": gap_close_rate,
             "revisions_total": revisions_total,
-            "revision_available": False,
+            "revision_available": llm_service.available,
         }
+
+
+def _bump_version(version: str) -> str:
+    """Minor patch bump: '0.1.0' -> '0.1.1', '2.0' -> '2.0.1'."""
+    parts = [int(p) if p.isdigit() else 0 for p in version.split(".")]
+    while len(parts) < 3:
+        parts.append(0)
+    parts[-1] += 1
+    return ".".join(str(p) for p in parts)
 
 
 evolution_service = EvolutionService()

@@ -1,11 +1,14 @@
-"""Tool generator — deterministic template strategy (Phase 12).
+"""Tool generator — template (deterministic) and LLM-assisted strategies.
 
-Given a `GapSpec` from the capability detector, the generator produces a
-candidate tool: a plain, valid Python function that validates its declared
-inputs and returns its declared outputs. It is an explicit, honest scaffold
-("validate + echo"), never a claimed semantic transform — the composition and
-LLM strategies that implement real behavior are future work and will replace
-the template body.
+A `GapSpec` from the capability detector becomes a DRAFT candidate through
+one of two strategies:
+
+- template (deterministic, always available) — an explicit validate + echo
+  scaffold that never claims real behavior;
+- llm (Phase 13d, only when an LLM transport is configured) — the model
+  writes the behavior; its output is contract-validated before it can enter
+  the registry, and any model failure falls back to the template strategy
+  with a visible `tool.generation_requested` error event.
 
 Candidates enter the registry as DRAFT and must still pass the structural gate
 (verify) and activation (register) before the capability detector can use them
@@ -23,6 +26,7 @@ from app.core.agent.detector import GapSpec
 from app.core.tools.registry import tool_registry
 from app.events import EventType, bus
 from app.models import ToolRecord
+from app.services.llm import LLMError, llm_service
 
 # Template-based generation is deterministic and needs no model service.
 AVAILABLE_STRATEGIES = ["template"]
@@ -30,8 +34,14 @@ AVAILABLE_STRATEGIES = ["template"]
 
 class ToolGenerator:
     def generate_available(self) -> bool:
-        """True whenever at least one deterministic strategy is registered."""
+        """True whenever at least one strategy is registered."""
         return bool(AVAILABLE_STRATEGIES)
+
+    def strategies(self) -> list[str]:
+        strategies = list(AVAILABLE_STRATEGIES)
+        if llm_service.available:
+            strategies.append("llm")
+        return strategies
 
     def generate(
         self,
@@ -49,6 +59,29 @@ class ToolGenerator:
         if tool_registry.by_capability(session, capability):
             return tool_registry.by_capability(session, capability), False
 
+        if llm_service.available:
+            try:
+                return self._generate_with_llm(session, gap_spec, capability, source_task_id), True
+            except LLMError as exc:
+                bus.publish(
+                    EventType.TOOL_GENERATION_REQUESTED,
+                    {
+                        "capability": capability,
+                        "strategy": "llm",
+                        "error": exc.code,
+                        "detail": exc.message,
+                        "fallback": True,
+                    },
+                )
+        return self._generate_with_template(session, gap_spec, capability, source_task_id), True
+
+    def _generate_with_template(
+        self,
+        session: Session,
+        gap_spec: GapSpec,
+        capability: str,
+        source_task_id: str,
+    ) -> ToolRecord:
         bus.publish(
             EventType.TOOL_GENERATION_STARTED,
             {"capability": capability, "strategy": "template"},
@@ -78,7 +111,48 @@ class ToolGenerator:
             EventType.TOOL_GENERATED,
             {"tool_id": tool.id, "capability": capability, "strategy": "template"},
         )
-        return tool, True
+        return tool
+
+    def _generate_with_llm(
+        self,
+        session: Session,
+        gap_spec: GapSpec,
+        capability: str,
+        source_task_id: str,
+    ) -> ToolRecord:
+        """Model-written candidate; schemas stay bound to the gap contract."""
+        bus.publish(
+            EventType.TOOL_GENERATION_STARTED,
+            {"capability": capability, "strategy": "llm", "model": llm_service.model},
+        )
+        payload = llm_service.generate_tool(gap_spec)
+        tool = ToolRecord(
+            id=uuid4().hex,
+            name=capability,
+            description=payload["description"] or gap_spec.description or f"Generated tool for {capability}",
+            version="0.1.0",
+            status="DRAFT",
+            input_schema=dict(gap_spec.input_schema),
+            output_schema=dict(gap_spec.output_schema),
+            capabilities=[capability],
+            tests=payload["tests"],
+            source_code=payload["source_code"],
+            provenance={
+                "strategy": "llm",
+                "generation_available": True,
+                "source_task_id": source_task_id,
+                "gap_spec": gap_spec.model_dump(),
+                "model": llm_service.model,
+            },
+        )
+        session.add(tool)
+        session.commit()
+        session.refresh(tool)
+        bus.publish(
+            EventType.TOOL_GENERATED,
+            {"tool_id": tool.id, "capability": capability, "strategy": "llm"},
+        )
+        return tool
 
 
 def sanitize_name(raw: str) -> str:

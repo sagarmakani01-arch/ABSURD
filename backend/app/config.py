@@ -17,3 +17,11 @@ CORS_ORIGINS = os.getenv("ABSURD_CORS_ORIGINS", "http://localhost:5173,http://12
 
 # API auth token. Empty string disables auth (development only).
 API_TOKEN = os.getenv("ABSURD_API_TOKEN", "")
+
+# Optional LLM transport (OpenAI-compatible chat completions). When all three
+# are set, tool generation uses the model and revisions become available;
+# otherwise ABSURD degrades to the deterministic template strategy.
+LLM_BASE_URL = os.getenv("ABSURD_LLM_BASE_URL", "")
+LLM_API_TOKEN = os.getenv("ABSURD_LLM_API_TOKEN", "")
+LLM_MODEL = os.getenv("ABSURD_LLM_MODEL", "")
+LLM_TIMEOUT_SECONDS = float(os.getenv("ABSURD_LLM_TIMEOUT_SECONDS", "60"))
