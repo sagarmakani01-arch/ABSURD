@@ -22,4 +22,14 @@ export default tseslint.config(
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
+  {
+    // R3F uses imperative per-frame mutation of refs/materials — the
+    // compiler-powered hook rules are inapplicable inside useFrame.
+    files: ['src/components/**/hero/**/*.tsx', 'src/**/*WebGL*.tsx'],
+    rules: {
+      'react-hooks/refs': 'off',
+      'react-hooks/immutability': 'off',
+      'react-hooks/purity': 'off',
+    },
+  },
 )
