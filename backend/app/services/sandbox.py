@@ -251,6 +251,149 @@ class ToolSandbox:
         )
         return record
 
+    def run_tests(
+        self,
+        tool: ToolRecord,
+        *,
+        timeout_seconds: float = EXECUTION_TIMEOUT_DEFAULT,
+    ) -> dict[str, Any]:
+        """Behavioral gate (Phase 13c): run the tool's stored tests in the sandbox.
+
+        Every test fragment is executed in one isolated subprocess against the
+        tool's module globals (so tests may reference the function by name or
+        via `fn`). A policy violation in source or tests, a syntax error, a
+        timeout, or a failing assertion all report per-test detail openly.
+        Test runs are annex observability — they do not write ExecutionRecords.
+        """
+        bucket: dict[str, Any] = {"available": True}
+        started = time.perf_counter()
+
+        def failed_with(code: str, message: str) -> dict[str, Any]:
+            return self._behavioral_result(bucket, started, code, message)
+
+        tests = list(tool.tests or [])
+        if not tests:
+            return failed_with("no_tests", "tool declares no tests; nothing to run")
+
+        try:
+            source_decision = check_policy(tool.source_code)
+        except SyntaxError as exc:
+            return failed_with("invalid_source", f"syntax error: {exc.msg}")
+        if not source_decision.allowed:
+            return self._behavioral_result(
+                bucket,
+                started,
+                "security_violation",
+                "; ".join(source_decision.violations[:5]),
+                source_allowed=False,
+            )
+
+        test_decision = check_policy("\n".join(tests))
+        if not test_decision.allowed:
+            return self._behavioral_result(
+                bucket,
+                started,
+                "security_violation",
+                "; ".join(test_decision.violations[:5]),
+                test_allowed=False,
+            )
+
+        func_name = _extract_function_name(tool.source_code, tool.name)
+        if func_name is None:
+            return failed_with("invalid_source", "no public function found in source code")
+
+        workdir = Path(tempfile.mkdtemp(prefix="absurd-sandbox-"))
+        try:
+            (workdir / "tool_module.py").write_text(tool.source_code, encoding="utf-8")
+            script = (
+                "import json, sys\n"
+                f"sys.path.insert(0, {str(workdir)!r})\n"
+                "import tool_module as _tool\n"
+                "G = vars(_tool)\n"
+                f"fn = G[{func_name!r}]\n"
+                f"TESTS = {json.dumps(tests)}\n"
+                "out = []\n"
+                "for code in TESTS:\n"
+                "    try:\n"
+                "        exec(code, G)\n"
+                "        out.append({'passed': True, 'error': None})\n"
+                "    except Exception as exc:\n"
+                "        out.append({'passed': False, 'error': f'{type(exc).__name__}: {exc}'})\n"
+                "print(json.dumps(out))\n"
+            )
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-I", "-c", script],
+                    capture_output=True,
+                    cwd=str(workdir),
+                    timeout=timeout_seconds,
+                )
+            except subprocess.TimeoutExpired:
+                return failed_with("timeout", f"test run exceeded {timeout_seconds:g}s and was killed")
+        finally:
+            shutil.rmtree(workdir, ignore_errors=True)
+
+        stdout = proc.stdout.decode("utf-8", errors="replace")
+        stderr = proc.stderr.decode("utf-8", errors="replace")
+        if len(stdout) > MAX_OUTPUT_BYTES:
+            return failed_with("output_too_large", f"test output exceeded {MAX_OUTPUT_BYTES} bytes")
+        try:
+            outcomes = json.loads(stdout)
+        except json.JSONDecodeError:
+            detail = (stderr or stdout).strip().splitlines()
+            message = detail[-1] if detail else "test runner produced no JSON report"
+            return failed_with("invalid_report", message[:MAX_ERROR_BYTES])
+        if not isinstance(outcomes, list) or len(outcomes) != len(tests):
+            return failed_with("invalid_report", "test runner returned a malformed report")
+
+        details = [
+            {"test": (outcome.get("test") or tests[index])[:200],
+             "passed": bool(outcome.get("passed")),
+             "error": outcome.get("error")}
+            for index, outcome in enumerate(outcomes)
+        ]
+        passed = all(item["passed"] for item in details)
+        return {
+            **bucket,
+            "passed": passed,
+            "tests_total": len(tests),
+            "tests_passed": sum(1 for item in details if item["passed"]),
+            "details": details,
+            "policy": {
+                "source_allowed": True,
+                "test_allowed": True,
+                "violations": [],
+            },
+            "error": None,
+            "duration_ms": int((time.perf_counter() - started) * 1000),
+        }
+
+    @staticmethod
+    def _behavioral_result(
+        bucket: dict[str, Any],
+        started: float,
+        code: str,
+        message: str,
+        *,
+        source_allowed: bool = True,
+        test_allowed: bool = True,
+    ) -> dict[str, Any]:
+        """Shared shape for every non-run failure of the behavioral gate."""
+        return {
+            **bucket,
+            "passed": False,
+            "tests_passed": 0,
+            "details": [],
+            "policy": {
+                "source_allowed": source_allowed,
+                "test_allowed": test_allowed,
+                "violations": [],
+            },
+            "error": code,
+            "error_message": message,
+            "duration_ms": int((time.perf_counter() - started) * 1000),
+        }
+
     def _run(
         self,
         tool: ToolRecord,

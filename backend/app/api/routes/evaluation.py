@@ -1,8 +1,8 @@
-"""Evaluation routes: structural verification pipeline (Phase 9).
+"""Evaluation routes: structural + behavioral verification (Phase 13c).
 
-Behavioral verification (executing the tool's own tests) requires the sandbox,
-which is not implemented yet — the response states that openly. The structural
-gate that IS implemented runs deterministic checks and produces a score.
+The structural gate (deterministic field/schema checks) and the behavioral
+gate (the tool's own tests executed in the sandbox with per-test results)
+both run on demand; each failure reports openly with no fabricated scores.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from app.core.tools.registry import tool_registry
 from app.db import get_session
 from app.events import EventType, bus
 from app.models import ToolRecord
+from app.services.sandbox import sandbox
 
 router = APIRouter(tags=["evaluation"])
 
@@ -44,8 +45,8 @@ def _structural_checks(tool: ToolRecord) -> list[dict[str, object]]:
 
 
 @router.post("/evaluations")
-def run_structural_evaluation(body: EvaluationRequest, session: SessionDep) -> dict[str, object]:
-    """Run the deterministic structural gate on a tool. Emits evaluation events."""
+def run_evaluation(body: EvaluationRequest, session: SessionDep) -> dict[str, object]:
+    """Run the structural gate and the sandbox behavioral gate on a tool."""
     tool = tool_registry.get(session, body.tool_id)
     if tool is None:
         raise HTTPException(status_code=404, detail="tool not found")
@@ -54,9 +55,17 @@ def run_structural_evaluation(body: EvaluationRequest, session: SessionDep) -> d
     checks = _structural_checks(tool)
     passed = sum(1 for c in checks if c["passed"])
     score = round(passed / len(checks), 3) if checks else 0.0
+
+    behavioral = sandbox.run_tests(tool)
     bus.publish(
         EventType.EVALUATION_FINISHED,
-        {"tool_id": tool.id, "score": score, "checks": checks},
+        {
+            "tool_id": tool.id,
+            "score": score,
+            "checks": checks,
+            "behavioral_passed": behavioral.get("passed", False),
+            "behavioral_error": behavioral.get("error"),
+        },
     )
 
     return {
@@ -65,8 +74,5 @@ def run_structural_evaluation(body: EvaluationRequest, session: SessionDep) -> d
         "checks_passed": passed,
         "checks_total": len(checks),
         "checks": checks,
-        "behavioral": {
-            "available": False,
-            "reason": "Sandboxed test execution is not implemented yet; structural gate only.",
-        },
+        "behavioral": behavioral,
     }

@@ -190,3 +190,70 @@ def test_only_registered_tools_execute() -> None:
     resp = client.post(f"/api/v1/tools/{draft['id']}/execute", json={"inputs": {}})
     assert resp.status_code == 422
     assert resp.json()["detail"] == "tool not registered"
+
+
+def test_behavioral_gate_passes_tool_tests() -> None:
+    tool = client.post("/api/v1/tools", json=ECHO).json()
+    result = client.post("/api/v1/evaluations", json={"tool_id": tool["id"]}).json()
+    behavioral = result["behavioral"]
+    assert behavioral["available"] is True
+    assert behavioral["passed"] is True
+    assert behavioral["tests_passed"] == behavioral["tests_total"] == 3
+    assert behavioral["error"] is None
+    assert all(item["passed"] for item in behavioral["details"])
+
+
+def test_behavioral_gate_catches_failing_test() -> None:
+    tool = client.post(
+        "/api/v1/tools",
+        json={
+            **ECHO,
+            "name": "wrong_echo",
+            "source_code": "def wrong_echo(inputs: dict) -> dict:\n    return {}\n",
+            "tests": ["fn = wrong_echo", "result = fn({})", "assert result == {'headings': ['x']}"],
+            "capabilities": ["wrong_echo"],
+        },
+    ).json()
+    result = client.post("/api/v1/evaluations", json={"tool_id": tool["id"]}).json()
+    behavioral = result["behavioral"]
+    assert behavioral["passed"] is False
+    assert behavioral["tests_passed"] == 2
+    failing = next(item for item in behavioral["details"] if not item["passed"])
+    assert "AssertionError" in failing["error"]
+
+
+def test_behavioral_gate_rejects_policy_violating_tests() -> None:
+    tool = client.post(
+        "/api/v1/tools",
+        json={
+            **ECHO,
+            "name": "sneaky",
+            "source_code": "def sneaky(inputs: dict) -> dict:\n    return {}\n",
+            "tests": ["fn = sneaky", "import os", "result = fn({})", "assert isinstance(result, dict)"],
+            "capabilities": ["sneaky"],
+        },
+    ).json()
+    result = client.post("/api/v1/evaluations", json={"tool_id": tool["id"]}).json()
+    behavioral = result["behavioral"]
+    assert behavioral["passed"] is False
+    assert behavioral["error"] == "security_violation"
+    assert behavioral["policy"]["test_allowed"] is False
+
+
+def test_behavioral_gate_times_out_honestly() -> None:
+    tool = client.post(
+        "/api/v1/tools",
+        json={
+            "name": "spin",
+            "description": "spins",
+            "source_code": "def spin(inputs: dict) -> dict:\n    while True:\n        pass\n",
+            "capabilities": ["spin"],
+            "tests": ["fn = spin", "result = fn({})", "assert isinstance(result, dict)"],
+            "input_schema": {},
+            "output_schema": {"ok": "bool"},
+        },
+    ).json()
+    result = client.post("/api/v1/evaluations", json={"tool_id": tool["id"]}).json()
+    behavioral = result["behavioral"]
+    assert behavioral["passed"] is False
+    assert behavioral["error"] == "timeout"

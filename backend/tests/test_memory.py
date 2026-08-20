@@ -78,15 +78,14 @@ def test_tool_memory_usage_empty_without_executions() -> None:
     assert client.get("/api/v1/memory/tools-usage").json() == {}
 
 
-def test_structural_evaluation_reports_sandbox_unavailable() -> None:
+def test_evaluation_runs_structural_and_behavioral_gates() -> None:
     tool = client.post("/api/v1/tools", json=SAMPLE).json()
     result = client.post("/api/v1/evaluations", json={"tool_id": tool["id"]}).json()
     assert result["verification_score"] == 1.0
-    assert result["behavioral"] == {
-        "available": False,
-        "reason": "Sandboxed test execution is not implemented yet; structural gate only.",
-    }
     assert result["checks_passed"] == result["checks_total"] == 8
+    assert result["behavioral"]["available"] is True
+    assert result["behavioral"]["passed"] is True
+    assert result["behavioral"]["tests_passed"] == 1
 
     broken = client.post(
         "/api/v1/tools", json={**SAMPLE, "source_code": "", "capabilities": []}
@@ -96,6 +95,9 @@ def test_structural_evaluation_reports_sandbox_unavailable() -> None:
     failed = {c["name"] for c in result["checks"] if not c["passed"]}
     assert "field.source_code" in failed
     assert "field.capabilities" in failed
+    # Behavioral gate reports the parse failure honestly.
+    assert result["behavioral"]["passed"] is False
+    assert result["behavioral"]["error"] == "invalid_source"
 
 
 def test_evolution_metrics_reflect_activity() -> None:
