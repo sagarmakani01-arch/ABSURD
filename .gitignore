@@ -1,0 +1,31 @@
+# Node
+node_modules/
+frontend/dist/
+
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# Runtime data
+backend/*.db
+backend/*.db-journal
+*.sqlite3
+
+# Env
+.env
+.env.local
+
+# Logs
+*.log
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# OneDrive conflict copies
+*_conflict_*
