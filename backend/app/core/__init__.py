@@ -11,3 +11,4 @@ explicit about what is not implemented yet — no fake AI behavior.
 - app.evaluation: evaluator, benchmark, test_runner (Phase: evaluation)
 - app.services: llm, events bridge (Phase: LLM service)
 - app.security: policies (Phase: security)
+"""

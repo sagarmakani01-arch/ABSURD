@@ -24,11 +24,21 @@ class WsBridge:
     """Fan-out of internal events to connected WebSocket clients.
 
     Each client receives the canonical envelope `{type, payload, sequence}`.
+
+    Events may be published from worker threads (sync endpoints run in a
+    FastAPI threadpool where there is no running loop), so `broadcast`
+    schedules the actual fan-out onto the application's event loop via
+    `run_coroutine_threadsafe` rather than calling `asyncio.create_task` at
+    publish time.
     """
 
     def __init__(self) -> None:
         self._clients: set[WebSocket] = set()
         self._lock = asyncio.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def start(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
 
     def connect(self, ws: WebSocket) -> None:
         self._clients.add(ws)
@@ -36,7 +46,7 @@ class WsBridge:
     def disconnect(self, ws: WebSocket) -> None:
         self._clients.discard(ws)
 
-    async def broadcast(self, event: Event) -> None:
+    async def _broadcast(self, event: Event) -> None:
         envelope = {
             "type": event.type.value,
             "payload": event.payload,
@@ -49,6 +59,14 @@ class WsBridge:
                 except Exception:
                     self._clients.discard(ws)
 
+    def broadcast(self, event: Event) -> None:
+        """Schedule fan-out on the app loop. Thread-safe entry point."""
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            return
+        future = asyncio.run_coroutine_threadsafe(self._broadcast(event), loop)
+        future.add_done_callback(lambda done: done.cancelled() or done.exception())
+
 
 bridge = WsBridge()
 
@@ -56,7 +74,8 @@ bridge = WsBridge()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    bus.subscribe(lambda event: asyncio.create_task(bridge.broadcast(event)))
+    bridge.start(asyncio.get_running_loop())
+    bus.subscribe(bridge.broadcast)
     bus.publish(EventType.SYSTEM_STARTED, {"version": __version__})
     yield
 

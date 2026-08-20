@@ -84,26 +84,37 @@ class Event(BaseModel):
     timestamp: str | None = None
 
 
+HISTORY_LIMIT = 500
+
+
 class EventBus:
     """In-process publish/subscribe event bus.
 
-    Synchronous subscriber dispatch. Async emission via `apublish` is planned
-    once subscribers need non-blocking work. The bus does not persist events;
-    persistence is the job of the memory layer (Experience Memory).
+    Synchronous subscriber dispatch. The bus keeps a bounded in-memory ring
+    buffer of recent events so the API can serve `GET /api/v1/events`;
+    long-term persistence is the job of the memory layer (Experience Memory).
     """
 
     def __init__(self) -> None:
         self._subscribers: list[callable] = []
+        self._history: list[Event] = []
         self._sequence = 0
 
     def subscribe(self, handler: callable) -> None:
         """Register a callable receiving every event."""
         self._subscribers.append(handler)
 
+    def recent(self, limit: int = 100) -> list[Event]:
+        """Most recent events in publication order (bounded ring buffer)."""
+        return list(self._history[-limit:])
+
     def publish(self, event_type: EventType, payload: dict[str, Any] | None = None) -> Event:
         """Create and dispatch an event synchronously."""
         self._sequence += 1
         event = Event(type=event_type, payload=payload or {}, sequence=self._sequence)
+        self._history.append(event)
+        if len(self._history) > HISTORY_LIMIT:
+            del self._history[:-HISTORY_LIMIT]
         for handler in list(self._subscribers):
             handler(event)
         return event
