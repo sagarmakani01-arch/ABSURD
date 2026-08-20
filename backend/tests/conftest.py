@@ -17,6 +17,7 @@ import pytest  # noqa: E402
 from app.db import Base, engine  # noqa: E402
 from app.events import bus  # noqa: E402
 from app.services.llm import llm_service  # noqa: E402
+from app.services.semantic import semantic_service  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -26,4 +27,5 @@ def _reset_db():
     Base.metadata.create_all(bind=engine)
     bus.reset()
     llm_service.reset()
+    semantic_service.reset()
     yield

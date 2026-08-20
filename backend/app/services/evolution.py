@@ -24,6 +24,7 @@ from app.models import ExecutionRecord, ExperienceRecord, KgEdge, TaskRecord, To
 from app.services.generator import tool_generator
 from app.services.llm import LLMError, llm_service
 from app.services.memory import knowledge_graph
+from app.services.semantic import semantic_service
 
 QUARANTINE_THRESHOLD = 3
 
@@ -279,6 +280,7 @@ class EvolutionService:
             "gap_close_rate": gap_close_rate,
             "revisions_total": revisions_total,
             "revision_available": llm_service.available,
+            "embedding_available": semantic_service.available,
         }
 
 

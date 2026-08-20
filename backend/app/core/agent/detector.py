@@ -1,4 +1,4 @@
-"""Deterministic Capability Detector (v1).
+"""Deterministic Capability Detector (v1) + optional semantic tier (Phase 13e).
 
 Annotates each planned step with one of `covered` / `partial` / `gap`.
 
@@ -10,18 +10,25 @@ Matching is two-tier and deterministic:
 2. Lexical fallback — v0 behavior (tool name appears in the step
    description) remains the signal when no schema is declared.
 
-Semantic (embedding) matching remains future work requiring an embedding
-service — see docs/agent-engine.md.
+3. Semantic fallback (optional, Phase 13e) — when an embedding service is
+   configured, steps without schemas may also be covered through cosine
+   similarity of the step description to the tool's name + capabilities.
+   The semantic tier lifts the lexical signal only; schema compatibility
+   stays authoritative.
 """
 
 from __future__ import annotations
 
 import re
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 from app.core.agent.planner import Plan, Step
+
+if TYPE_CHECKING:
+    from app.services.semantic import SemanticService
 
 # Type compatibility: a declared value type is compatible with a schema type
 # when equal, when the declared type is a subtype, or when one side is "any".
@@ -100,6 +107,9 @@ class RegistryTool:
 class CapabilityDetector:
     """Maps steps to registry coverage. Deterministic; no LLM."""
 
+    def __init__(self, semantic_tier: "SemanticService | None" = None) -> None:
+        self.semantic_tier = semantic_tier
+
     def evaluate(self, plan: Plan, tools: list[RegistryTool]) -> CapabilityPlan:
         entries: list[CapabilityEntry] = []
         for step in plan.steps:
@@ -142,10 +152,13 @@ class CapabilityDetector:
 
         A full schema match (inputs and outputs compatible, capability tag
         matches) scores 2. Lexical name presence alone scores 1 (kept for v0
-        compatibility), as does a single-direction IO match.
+        compatibility), as does a single-direction IO match. The optional
+        semantic tier lifts the lexical signal for schema-less steps only.
         """
         cap_match = any(self._tagged(tag, step.description) for tag in tool.capabilities)
         lexical = cap_match or self._name_match(tool, step.description)
+        if not lexical and self.semantic_tier is not None and self.semantic_tier.available:
+            lexical = self.semantic_tier.matches(tool, step.description)
 
         # No schema declared on the step: lexical match is full coverage (v0).
         if not step.expected_inputs and not step.expected_outputs:

@@ -23,12 +23,13 @@ from app.models import TaskRecord, ToolRecord
 from app.services.evolution import evolution_service
 from app.services.generator import tool_generator
 from app.services.sandbox import sandbox
+from app.services.semantic import semantic_service
 
 
 class AgentEngine:
     def __init__(self) -> None:
         self.planner = Planner()
-        self.detector = CapabilityDetector()
+        self.detector = CapabilityDetector(semantic_tier=semantic_service)
         self.reasoner = Reasoner()
 
     def run(self, session: Session, task: TaskRecord) -> TaskRecord:
