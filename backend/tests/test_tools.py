@@ -107,7 +107,7 @@ def test_registered_tool_covers_capability() -> None:
     # honest PLANNED placeholder result instead of a fabricated output.
     assert body["status"] == "COMPLETED"
     assert body["result"]["kind"] == "PLANNED"
-    assert body["result"]["detail"] == "All steps are covered by registered tools; execution pipeline ships in Phase 7."
+    assert body["result"]["detail"] == "All steps are covered by registered tools; tool execution is not implemented yet (sandbox phase)."
 
 
 def test_events_for_lifecycle() -> None:

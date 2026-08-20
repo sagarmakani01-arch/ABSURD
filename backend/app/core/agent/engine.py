@@ -34,11 +34,32 @@ class AgentEngine:
         )
 
         capabilities = self.detector.evaluate(plan, tool_registry.registered_tools(session))
+        generation_available = False  # requires LLM backend + sandbox (later phases)
         for entry in capabilities.entries:
             if entry.coverage.value == "gap" and entry.gap_spec:
                 bus.publish(
                     EventType.CAPABILITY_MISSING,
                     {"task_id": task.id, "step_id": entry.step_id, "capability": entry.gap_spec.name_hint},
+                )
+                bus.publish(
+                    EventType.CAPABILITY_REQUIRED,
+                    {
+                        "task_id": task.id,
+                        "step_id": entry.step_id,
+                        "gap_spec": entry.gap_spec.model_dump(),
+                        "generation_available": generation_available,
+                    },
+                )
+            elif entry.coverage.value == "partial":
+                bus.publish(
+                    EventType.CAPABILITY_REQUIRED,
+                    {
+                        "task_id": task.id,
+                        "step_id": entry.step_id,
+                        "gap_spec": entry.gap_spec.model_dump() if entry.gap_spec else None,
+                        "matched_tool_ids": entry.matched_tool_ids,
+                        "generation_available": generation_available,
+                    },
                 )
             elif entry.coverage.value == "covered":
                 bus.publish(
@@ -59,7 +80,7 @@ class AgentEngine:
                 },
             )
 
-        verdict = self.reasoner.synthesize(plan, capabilities)
+        verdict = self.reasoner.synthesize(plan, capabilities, generation_available)
         task.status = "FAILED" if verdict.error else "COMPLETED"
         task.result = verdict.task_result
         task.error = verdict.error
@@ -67,7 +88,12 @@ class AgentEngine:
         if verdict.error:
             bus.publish(
                 EventType.TASK_FAILED,
-                {"task_id": task.id, "kind": verdict.error["kind"], "missing": verdict.error["missing"]},
+                {
+                    "task_id": task.id,
+                    "kind": verdict.error["kind"],
+                    "missing": verdict.error["missing"],
+                    "generation_available": verdict.error.get("generation_available", False),
+                },
             )
         else:
             bus.publish(EventType.TASK_COMPLETED, {"task_id": task.id, "confidence": verdict.confidence})

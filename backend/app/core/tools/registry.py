@@ -72,7 +72,16 @@ class ToolRegistry:
     def registered_tools(self, session: Session) -> list[RegistryTool]:
         """Read model backing the capability detector (REGISTERED only)."""
         rows = self.list(session, status=ToolStatus.REGISTERED.value)
-        return [RegistryTool(id=r.id, name=r.name, capabilities=r.capabilities) for r in rows]
+        return [
+            RegistryTool(
+                id=r.id,
+                name=r.name,
+                capabilities=r.capabilities,
+                input_schema={k: str(v) for k, v in (r.input_schema or {}).items()},
+                output_schema={k: str(v) for k, v in (r.output_schema or {}).items()},
+            )
+            for r in rows
+        ]
 
     def get(self, session: Session, tool_id: str) -> ToolRecord | None:
         return session.get(ToolRecord, tool_id)

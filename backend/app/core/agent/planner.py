@@ -38,7 +38,13 @@ class Planner:
     """Deterministic goal decomposition."""
 
     def perform(self, goal: str, context: dict[str, object] | None = None) -> Plan:
-        """Decompose `goal` into steps. Never executes anything."""
+        """Decompose `goal` into steps. Never executes anything.
+
+        Optional `context["expected_io"]` is a list of `{"inputs": {...},
+        "outputs": {...}}` hints aligned positionally with the steps; when
+        present they feed schema-based capability detection.
+        """
+        context = context or {}
         segments = [s.strip() for s in SEPARATOR.split(goal) if s.strip()]
         if not segments:
             segments = [goal]
@@ -46,5 +52,16 @@ class Planner:
             Step(description=segment, confidence=0.5 if len(segments) > 1 else 1.0)
             for segment in segments
         ]
+        io_hints = context.get("expected_io")
+        if isinstance(io_hints, list):
+            for index, hint in enumerate(io_hints[: len(steps)]):
+                if not isinstance(hint, dict):
+                    continue
+                inputs = hint.get("inputs")
+                outputs = hint.get("outputs")
+                if isinstance(inputs, dict):
+                    steps[index].expected_inputs = {str(k): str(v) for k, v in inputs.items()}
+                if isinstance(outputs, dict):
+                    steps[index].expected_outputs = {str(k): str(v) for k, v in outputs.items()}
         strategy = "split" if len(steps) > 1 else "flat"
         return Plan(goal=goal, strategy=strategy, steps=steps)

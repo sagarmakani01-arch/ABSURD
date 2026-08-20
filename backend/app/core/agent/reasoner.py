@@ -21,7 +21,12 @@ class ReasonerOutput(BaseModel):
 
 
 class Reasoner:
-    def synthesize(self, plan: Plan, capability_plan: CapabilityPlan) -> ReasonerOutput:
+    def synthesize(
+        self,
+        plan: Plan,
+        capability_plan: CapabilityPlan,
+        generation_available: bool = False,
+    ) -> ReasonerOutput:
         feedback: list[dict[str, object]] = []
         for entry in capability_plan.entries:
             feedback.append(
@@ -29,6 +34,7 @@ class Reasoner:
                     "step_id": entry.step_id,
                     "coverage": entry.coverage.value,
                     "matched_tool_ids": entry.matched_tool_ids,
+                    "confidence": entry.confidence,
                 }
             )
 
@@ -39,8 +45,24 @@ class Reasoner:
                 error={
                     "kind": "NO_CAPABILITY",
                     "missing": missing,
-                    "detail": "No registered tool covers the required steps. "
-                    "Tool generation is not implemented yet (Phase 7).",
+                    "generation_available": generation_available,
+                    "detail": "No registered tool covers the required steps."
+                    if not generation_available
+                    else "Missing capabilities queued for tool generation.",
+                },
+                step_feedback=feedback,
+            )
+
+        if capability_plan.has_partial:
+            missing = [gap.name_hint for gap in capability_plan.partials if gap]
+            return ReasonerOutput(
+                confidence=0.7,
+                error={
+                    "kind": "PARTIAL_CAPABILITY",
+                    "missing": missing,
+                    "generation_available": generation_available,
+                    "detail": "Registered tools fit part of the steps; composition or "
+                    "generation is required to finish.",
                 },
                 step_feedback=feedback,
             )
@@ -50,7 +72,7 @@ class Reasoner:
             task_result={
                 "kind": "PLANNED",
                 "detail": "All steps are covered by registered tools; "
-                "execution pipeline ships in Phase 7.",
+                "tool execution is not implemented yet (sandbox phase).",
                 "steps": len(plan.steps),
             },
             step_feedback=feedback,
