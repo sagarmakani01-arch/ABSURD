@@ -14,10 +14,17 @@ export interface StreamState {
   lastEvent: SimEvent | null
 }
 
-/** URL resolution: same-origin `/ws` in dev is proxied by Vite. */
-function wsUrl(): string {
+/** URL resolution: same-origin `/ws` in dev is proxied by Vite. The token
+ *  rides the query string because browsers cannot set WebSocket headers. */
+function wsUrl(options?: { token?: string }): string {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${proto}://${window.location.host}/ws`
+  const token =
+    options?.token ??
+    (typeof localStorage !== 'undefined'
+      ? (localStorage.getItem('absurd_api_token') ?? import.meta.env.VITE_API_TOKEN)
+      : import.meta.env.VITE_API_TOKEN)
+  const query = token ? `?token=${encodeURIComponent(token)}` : ''
+  return `${proto}://${window.location.host}/ws${query}`
 }
 
 export function useEventStream(): StreamState {
@@ -34,7 +41,7 @@ export function useEventStream(): StreamState {
 
     const connect = () => {
       if (disposed) return
-      socket = new WebSocket(wsUrl())
+      socket = new WebSocket(wsUrl({ token }))
       socketRef.current = socket
 
       socket.onopen = () => {

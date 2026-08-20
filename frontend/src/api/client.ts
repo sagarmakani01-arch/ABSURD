@@ -13,10 +13,19 @@ export class ApiError extends Error {
   }
 }
 
+/** Token is read from localStorage (set by the UI) or baked-in at build time. */
+function authHeaders(): Record<string, string> {
+  const token =
+    typeof localStorage !== 'undefined'
+      ? (localStorage.getItem('absurd_api_token') ?? import.meta.env.VITE_API_TOKEN)
+      : import.meta.env.VITE_API_TOKEN
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...init,
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...init?.headers },
   })
   if (res.status === 404) throw new ApiError(404, 'not_found', `${path} not found`)
   if (!res.ok) {

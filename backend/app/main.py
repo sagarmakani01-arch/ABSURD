@@ -10,8 +10,12 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import hmac
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app import __version__
 from app.api import all_routers
@@ -19,6 +23,7 @@ from app.config import API_TOKEN, CORS_ORIGINS
 from app.db import init_db
 from app.events import Event, EventType, bus
 from app.services import projectors
+import app.config as config
 
 
 class WsBridge:
@@ -106,6 +111,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Bearer-token auth (Phase 13f). Active only when ABSURD_API_TOKEN is set;
+# the health endpoint and the API docs stay readable. The token value is
+# read per request so tests can flip it without reimporting the app.
+_AUTH_EXEMPT_PATHS = {"/health", "/api/v1/health", "/docs", "/openapi.json", "/redoc"}
+
+
+@app.middleware("http")
+async def bearer_auth(request: Request, call_next) -> JSONResponse:
+    token = config.API_TOKEN
+    if token and request.url.path not in _AUTH_EXEMPT_PATHS:
+        if request.headers.get("authorization", "") != f"Bearer {token}":
+            return JSONResponse(status_code=401, content={"detail": "unauthorized"})
+    return await call_next(request)
+
 for router in all_routers:
     app.include_router(router, prefix="/api/v1")
 
@@ -113,9 +132,13 @@ for router in all_routers:
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
     """Live event stream. Server sends `{type, payload, sequence}` envelopes."""
-    if API_TOKEN:
-        token = ws.headers.get("authorization", "").removeprefix("Bearer ")
-        if token != API_TOKEN:
+    if config.API_TOKEN:
+        # Browsers cannot set WebSocket headers, so the token is accepted
+        # from the Authorization header or the `token` query parameter.
+        header_token = ws.headers.get("authorization", "").removeprefix("Bearer ")
+        query_token = ws.query_params.get("token", "")
+        supplied = query_token or header_token
+        if not supplied or not hmac.compare_digest(supplied, config.API_TOKEN):
             await ws.close(code=1008)
             return
     await ws.accept()
