@@ -1,10 +1,10 @@
 # ABSURD — System Architecture
 
-> **Status note (Phase 12):** this document is the target/design spec. The
-> implemented matrix is in `README.md`. Tool generation is implemented for the
-> deterministic template strategy only; the security sandbox and real tool
-> execution are **not implemented** — their contracts exist and every API
-> surface for them returns structured "not implemented" responses.
+> **Status note (Phase 13):** this document is the target/design spec. The
+> implemented matrix is in `README.md`. Tool generation (template strategy,
+> plus LLM-assisted when `ABSURD_LLM_*` is configured), the security sandbox
+> with real subprocess execution, the behavioral verification gate, and the
+> semantic embedding matching tier are all implemented and tested.
 
 ## 1. Overview
 

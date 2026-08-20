@@ -74,7 +74,7 @@ None runtime. The remote README is the only user-facing artifact.
 | Docker unavailable on host | High (execution) | Sandbox module must fail closed: no Docker → execution blocked, not degraded to host execution. |
 | OneDrive-local repo path | Low | Live sync may slow builds; keep `node_modules`, `.venv`, build output git-ignored. |
 | Remote repo merge conflicts | Low | Remote has a single README; pull/rebase before first push. |
-| Monitoring of "no fake AI" rule | Medium | All AI-dependent paths (LLM service) ship as explicit `NotImplemented`/stub abstractions until real backends land; deterministic rule-based paths (registry matching, validation) implemented for real. |
+| Monitoring of "no fake AI" rule | Medium | All AI-dependent paths (LLM service, semantic embeddings) ship as real but *conditional* transports: when credentials are absent they degrade with structured flags (`generation_available`, `revision_available`, `embedding_available`), never with pretend model output; deterministic rule-based paths (registry matching, validation, template generation) are implemented for real. |
 
 ## 8. Phase Gate
 

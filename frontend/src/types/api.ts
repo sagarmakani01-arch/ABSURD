@@ -110,12 +110,24 @@ export interface MetricsDTO {
   generation_strategies: string[]
 }
 
-/** POST /evaluations result: structural gate only (Phase 9). */
+/** POST /evaluations result: structural gate + sandbox behavioral gate (Phase 13c). */
+export interface EvalBehavioral {
+  available: boolean
+  passed: boolean
+  tests_total: number
+  tests_passed: number
+  details: Array<{ name: string; passed: boolean; duration_ms: number }>
+  policy: { allow: boolean; reason?: string }
+  error: string | null
+  error_message: string | null
+  duration_ms: number
+}
+
 export interface EvalResultDTO {
   tool_id: string
   verification_score: number
   checks_passed: number
   checks_total: number
   checks: Array<{ name: string; passed: boolean; detail?: string }>
-  behavioral: { available: boolean; reason: string }
+  behavioral: EvalBehavioral
 }

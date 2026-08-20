@@ -44,10 +44,12 @@ ABSURD decomposes the problem into distinct, independently verifiable layers:
   real, guarded pipeline — and honestly refuses to run until the generator it
   needs is built.
 
-What ABSURD does **not** fake: there is no LLM in the loop today. Tool
-generation (`generation_available: false`), the security sandbox, and real
-tool execution are later phases. The API surface for them already exists and
-returns structured "not implemented yet" responses rather than pretending.
+What ABSURD does **not** fake: all AI-dependent paths ship as real, tested
+transports that are **honestly conditional**. Tool generation and revisions
+use an LLM when `ABSURD_LLM_*` credentials are configured, and otherwise
+degrade to the deterministic template strategy with a structured
+`generation_available: false` signal — never a pretend model. The same
+pattern holds for the embedding matching tier (`ABSURD_EMBEDDINGS_*`).
 
 ## ARCHITECTURE
 
@@ -67,10 +69,13 @@ returns structured "not implemented yet" responses rather than pretending.
 
 - `backend/app/api/` — FastAPI routers (health, events, tasks, tools,
   evaluation, memory, evolution) + WebSocket bridge.
-- `backend/app/core/agent/` — planner, schema-based capability detector,
-  reasoner, engine. Fully deterministic.
+- `backend/app/core/agent/` — planner, schema-based capability detector
+  (with an optional semantic embedding tier), reasoner, engine (executes
+  covered steps in the sandbox). Fully deterministic.
 - `backend/app/core/tools/` — tool model + registry with transition rules.
-- `backend/app/services/` — memory stores, event projectors, evolution loop.
+- `backend/app/services/` — sandbox (AST policy + subprocess execution),
+  tool generator (template + LLM strategy), memory stores, event projectors,
+  evolution loop, semantic matching.
 - `backend/app/models.py` — SQLAlchemy models (tasks, tools, executions,
   experiences, knowledge-graph edges).
 - `frontend/src/` — landing page plus `/app` shell: Overview, Tools, Tasks,
@@ -82,21 +87,26 @@ Design rationale and the historical decision log live in
 
 ## SECURITY
 
-The security posture is conservative because the dangerous parts are not built
-yet and the design says so:
+The security posture is conservative. The sandbox runs tool code for real,
+but refuses everything it cannot prove safe:
 
-- No generated code runs anywhere. Sandbox (subprocess/container isolation,
-  resource caps, network-off default, AST policy checks) is specced in
-  [`docs/tool-system.md`](docs/tool-system.md) and marked **not implemented**.
-- Tool *source code* is accepted by the registry as metadata only; it is never
-  evaluated, imported, or executed.
-- WebSocket bridge authenticates against `API_TOKEN` (empty = disabled
-  locally; see `backend/.env.example`).
-- Secrets never enter tools: executions, when they exist, receive only the
-  caller-provided inputs.
-- Quarantine and version gates already enforce lifecycle invariants
-  server-side (e.g. a revision cannot be promoted before a completed revision
-  exists).
+- Sandbox (`backend/app/services/sandbox.py`): every execution runs in a
+  fresh `python -I` subprocess with a throwaway working directory. An AST
+  policy check rejects `eval`/`exec`/`compile`/`__import__`, all imports,
+  `open`, dunder access, and shadowed attribute tricks **before** the
+  subprocess starts; the same policy gates tool source and stored tests at
+  registration time. The behavioral gate (`POST /evaluations`) executes the
+  tool's own tests in the sandbox; timeout (default 30s) and output-size caps
+  apply. Spec history: [`docs/tool-system.md`](docs/tool-system.md).
+- Tool code runs only inside the sandbox — never imported or evaluated in the
+  gateway process. Executions receive only the caller-provided inputs; result
+  output must deserialize against the tool's declared `output_schema`.
+- REST and WebSocket routes authenticate against `ABSURD_API_TOKEN` when set
+  (empty = disabled locally). REST accepts `Authorization: Bearer ...`;
+  the WS accepts the same header or a `token` query parameter (browsers
+  cannot set WS headers). `/health` and the API docs stay public.
+- Quarantine and version gates enforce lifecycle invariants server-side
+  (e.g. a revision cannot be promoted before a completed revision exists).
 
 ## STATUS
 
@@ -105,15 +115,18 @@ yet and the design says so:
 | Task lifecycle (`CREATED → FAILED/COMPLETED`) | Implemented & tested |
 | Deterministic planning + schema capability detection | Implemented & tested |
 | Partial/gap verdicts with structured `gap_spec` | Implemented & tested |
+| Semantic embedding matching tier (optional, schema stays authoritative) | Implemented & gated on `ABSURD_EMBEDDINGS_*` |
 | Tool registry lifecycle + structural gate | Implemented & tested |
 | Experience memory, knowledge graph, tools memory | Implemented & tested |
-| Evolution metrics, failure analysis, quarantine | Implemented & tested |
-| Revision/versioning pipeline (guarded) | Implemented & gated |
-| Tool generation (deterministic template strategy) | Implemented & tested |
-| LLM-assisted tool / revision generation | **Not implemented** (honest 409s) |
-| Security sandbox + real tool execution | **Not implemented** (specced only) |
+| Evolution metrics, failure analysis, quarantine (real, on execution failures) | Implemented & tested |
+| Revision/versioning pipeline | Implemented & gated on LLM credentials |
+| Tool generation (template strategy) | Implemented & tested |
+| LLM-assisted tool / revision generation | Implemented & tested (with fake transport) — degraded to template when unconfigured |
+| Security sandbox + real tool execution | Implemented & tested |
+| Behavioral verification gate (`POST /evaluations`) | Implemented & tested |
+| REST + WS bearer auth | Implemented & tested (disabled when token empty) |
 
-Backend test suite: **47 passed** (`backend/tests`). Frontend: typecheck,
+Backend test suite: **79 passed** (`backend/tests`). Frontend: typecheck,
 lint and build green.
 
 ## GETTING STARTED
@@ -127,6 +140,10 @@ python -m venv .venv
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
+
+All configuration is env-driven (see `backend/.env.example`); the only
+required setting is none — ABSURD runs fully configured, with the LLM,
+embedding and auth tiers simply disabled:
 
 Frontend (Node 22+, npm):
 
@@ -155,9 +172,9 @@ gateway. Tests: `cd backend && python -m pytest` from `backend/`.
 - Phase 12: deterministic tool generation (template strategy) — tasks seed
   DRAFT candidates for gaps; registering a candidate closes the loop.
   **Done.**
-- Next: sandboxed execution (runs a tool's tests for real behavioral
-  verification), then LLM-assisted generation and semantic matching (docs per
-  module).
+- Phase 13: sandboxed tool execution with real outcomes, behavioral
+  verification gate, LLM-assisted generation/revisions, semantic embedding
+  matching, and REST/WS bearer auth. **Done.**
 
 ## DOCS
 

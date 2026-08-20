@@ -64,7 +64,9 @@ export function Evaluation() {
           </div>
           <SpecRow label="checks">{evaluate.data.checks_passed} / {evaluate.data.checks_total} passed</SpecRow>
           <SpecRow label="behavioral">
-            {evaluate.data.behavioral.available ? 'AVAILABLE' : 'NOT IMPLEMENTED'}
+            {evaluate.data.behavioral.available
+              ? `${evaluate.data.behavioral.tests_passed} / ${evaluate.data.behavioral.tests_total} TESTS PASSED`
+              : 'UNAVAILABLE'}
           </SpecRow>
           {evaluate.data.checks.map((c) => (
             <SpecRow key={c.name} label={c.name}>

@@ -1,7 +1,62 @@
 /** /app/system — operational status + live event log. */
+import { useState } from 'react'
 import { useEventStream } from '../../lib/useEventStream'
 import { useHealth } from '../../api/hooks'
 import { PageHeader } from '../../app/AppUI'
+
+const TOKEN_KEY = 'absurd_api_token'
+
+function TokenControl() {
+  const [value, setValue] = useState(() => localStorage.getItem(TOKEN_KEY) ?? '')
+
+  const save = () => {
+    if (value) localStorage.setItem(TOKEN_KEY, value.trim())
+    else localStorage.removeItem(TOKEN_KEY)
+    setValue(value.trim())
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="sys-label">API TOKEN (ABSURD_API_TOKEN)</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          aria-label="API token"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && save()}
+          placeholder="Bearer token, if the gateway requires one"
+          style={{
+            flex: 1,
+            background: 'transparent',
+            border: '1px solid var(--line)',
+            color: 'var(--text-hi)',
+            padding: '8px 10px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--fs-12)',
+            outline: 'none',
+          }}
+        />
+        <button
+          onClick={save}
+          style={{
+            background: 'transparent',
+            border: '1px solid var(--line)',
+            color: 'var(--text-hi)',
+            padding: '8px 14px',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--fs-11)',
+            cursor: 'pointer',
+          }}
+        >
+          {value ? 'SAVE' : 'CLEAR'}
+        </button>
+      </div>
+      <p style={{ margin: 0, color: 'var(--text-low)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-11)' }}>
+        Sent as <code>Authorization: Bearer</code> on REST and <code>?token=</code> on the websocket.
+      </p>
+    </div>
+  )
+}
 
 export function System() {
   const health = useHealth()
@@ -53,6 +108,10 @@ export function System() {
               </p>
             )}
           </div>
+        </div>
+
+        <div className="instr-panel" style={{ padding: 22 }}>
+          <TokenControl />
         </div>
 
         <div className="instr-panel" style={{ padding: 22 }}>

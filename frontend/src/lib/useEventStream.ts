@@ -41,7 +41,7 @@ export function useEventStream(): StreamState {
 
     const connect = () => {
       if (disposed) return
-      socket = new WebSocket(wsUrl({ token }))
+      socket = new WebSocket(wsUrl())
       socketRef.current = socket
 
       socket.onopen = () => {

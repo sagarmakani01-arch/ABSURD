@@ -101,9 +101,13 @@ Every message uses the envelope `{"type": "...", "payload": {...}}`.
 
 ## 4. Authentication
 
-- v1: static bearer token (env `ABSURD_API_TOKEN`), enforced via dependency on every REST route and WS accept.
+- v1: static bearer token (env `ABSURD_API_TOKEN`), enforced by an HTTP
+  middleware on every REST route and at WS accept (Phase 13f). REST requires
+  `Authorization: Bearer <token>`; the WebSocket accepts the same header or a
+  `token` query parameter (browsers cannot set WS headers). `/health`,
+  `/api/v1/health`, and the API docs are exempt. Empty token = auth disabled.
 - Future: JWT with scopes (`task:read`, `task:write`, `tool:admin`, `memory:read`).
-- All auth failures → `401 {"detail": "unauthorized", "code": "auth.unauthorized"}`.
+- All auth failures → `401 {"detail": "unauthorized", "code": "auth.unauthorized"}` (WS: close 1008).
 
 ## 5. Gateway Responsibilities (not the core logic)
 
