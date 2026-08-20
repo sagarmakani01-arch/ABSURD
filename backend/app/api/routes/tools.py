@@ -13,8 +13,9 @@ from app.core.agent.detector import GapSpec
 from app.core.tools.model import ToolStatus
 from app.core.tools.registry import RegistryError, tool_registry
 from app.db import get_session
-from app.models import ToolRecord
+from app.models import ExecutionRecord, ToolRecord
 from app.services.generator import tool_generator
+from app.services.sandbox import MAX_TIMEOUT_SECONDS, sandbox
 
 router = APIRouter(tags=["tools"])
 
@@ -62,6 +63,28 @@ class GenerateRequest(BaseModel):
 
 class ToolAction(BaseModel):
     pass
+
+
+class ExecuteRequest(BaseModel):
+    inputs: dict[str, object] = Field(default_factory=dict)
+    task_id: str = Field(default="", max_length=64)
+    timeout_seconds: float = Field(default=10.0, ge=0.5, le=MAX_TIMEOUT_SECONDS)
+
+
+class ExecutionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    task_id: str
+    tool_id: str
+    tool_version: str
+    status: str
+    input: dict[str, object]
+    output: dict[str, object] | None
+    error: dict[str, object] | None
+    metrics: dict[str, object]
+    started_at: datetime
+    finished_at: datetime | None
 
 
 SessionDep = Annotated[Session, Depends(get_session)]
@@ -155,3 +178,24 @@ def reject_tool(tool_id: str, session: SessionDep, _body: ToolAction | None = No
 @router.post("/tools/{tool_id}/deprecate", response_model=ToolRead)
 def deprecate_tool(tool_id: str, session: SessionDep, _body: ToolAction | None = None) -> ToolRecord:
     return _transition(_get_tool(session, tool_id), ToolStatus.DEPRECATED, session)
+
+
+@router.post("/tools/{tool_id}/execute", response_model=ExecutionRead)
+def execute_tool(tool_id: str, body: ExecuteRequest, session: SessionDep) -> ExecutionRecord:
+    """Run a REGISTERED tool once in the sandbox (Phase 13a).
+
+    The source is policy-checked (AST), executed in an isolated subprocess
+    with a wall-clock timeout, and validated against the tool's output
+    schema. The result is an honest ExecutionRecord; execution alone does
+    not change tool status.
+    """
+    tool = _get_tool(session, tool_id)
+    if tool.status != ToolStatus.REGISTERED.value:
+        raise HTTPException(status_code=422, detail="tool not registered")
+    return sandbox.execute(
+        session,
+        tool,
+        body.inputs,
+        task_id=body.task_id,
+        timeout_seconds=body.timeout_seconds,
+    )
