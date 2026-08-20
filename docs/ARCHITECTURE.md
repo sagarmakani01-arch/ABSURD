@@ -1,9 +1,10 @@
 # ABSURD — System Architecture
 
-> **Status note (Phase 11):** this document is the target/design spec. The
-> implemented matrix is in `README.md`. The tool generator, security sandbox,
-> and real tool execution are **not implemented**; their contracts exist and
-> every API surface for them returns structured "not implemented" responses.
+> **Status note (Phase 12):** this document is the target/design spec. The
+> implemented matrix is in `README.md`. Tool generation is implemented for the
+> deterministic template strategy only; the security sandbox and real tool
+> execution are **not implemented** — their contracts exist and every API
+> surface for them returns structured "not implemented" responses.
 
 ## 1. Overview
 

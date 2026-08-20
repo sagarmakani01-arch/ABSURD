@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.events import EventType, bus
 from app.models import ExecutionRecord, ExperienceRecord, KgEdge, TaskRecord, ToolRecord
+from app.services.generator import AVAILABLE_STRATEGIES, tool_generator
 from app.services.memory import knowledge_graph
 
 QUARANTINE_THRESHOLD = 3
@@ -204,6 +205,8 @@ class EvolutionService:
             "task_failure_rate": round(tasks_failed / tasks_total, 3) if tasks_total else 0.0,
             "tools_registered": tools_registered,
             "tools_generated": tools_generated,
+            "generation_available": tool_generator.generate_available(),
+            "generation_strategies": list(AVAILABLE_STRATEGIES),
             "tools_quarantined": 0,
             "executions": executions,
             "experiences": experiences,

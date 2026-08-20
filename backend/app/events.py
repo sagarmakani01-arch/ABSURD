@@ -111,6 +111,11 @@ class EventBus:
         """Most recent events in publication order (bounded ring buffer)."""
         return list(self._history[-limit:])
 
+    def reset(self) -> None:
+        """Clear history and sequence (test isolation; never used by the app)."""
+        self._history.clear()
+        self._sequence = 0
+
     def publish(self, event_type: EventType, payload: dict[str, Any] | None = None) -> Event:
         """Create and dispatch an event synchronously."""
         self._sequence += 1

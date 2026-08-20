@@ -106,6 +106,8 @@ export interface MetricsDTO {
   gap_close_rate: number | null
   revisions_total: number
   revision_available: boolean
+  generation_available: boolean
+  generation_strategies: string[]
 }
 
 /** POST /evaluations result: structural gate only (Phase 9). */

@@ -14,6 +14,7 @@ from app.core.agent.reasoner import Reasoner
 from app.core.tools.registry import tool_registry
 from app.events import EventType, bus
 from app.models import TaskRecord
+from app.services.generator import tool_generator
 
 
 class AgentEngine:
@@ -34,7 +35,7 @@ class AgentEngine:
         )
 
         capabilities = self.detector.evaluate(plan, tool_registry.registered_tools(session))
-        generation_available = False  # requires LLM backend + sandbox (later phases)
+        generation_available = tool_generator.generate_available()
         for entry in capabilities.entries:
             if entry.coverage.value == "gap" and entry.gap_spec:
                 bus.publish(
@@ -50,6 +51,9 @@ class AgentEngine:
                         "generation_available": generation_available,
                     },
                 )
+                # Self-extension: seed a DRAFT candidate for the gap (idempotent).
+                if generation_available:
+                    tool_generator.generate(session, entry.gap_spec, source_task_id=task.id)
             elif entry.coverage.value == "partial":
                 bus.publish(
                     EventType.CAPABILITY_REQUIRED,
@@ -61,6 +65,8 @@ class AgentEngine:
                         "generation_available": generation_available,
                     },
                 )
+                if generation_available and entry.gap_spec:
+                    tool_generator.generate(session, entry.gap_spec, source_task_id=task.id)
             elif entry.coverage.value == "covered":
                 bus.publish(
                     EventType.CAPABILITY_FOUND,

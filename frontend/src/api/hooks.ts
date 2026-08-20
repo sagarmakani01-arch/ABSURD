@@ -128,6 +128,23 @@ export function useToolTransition() {
   })
 }
 
+export function useGenerateTool() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (body: {
+      name_hint: string
+      description?: string
+      input_schema?: Record<string, string>
+      output_schema?: Record<string, string>
+    }) => api.generateTool(body),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: ['tools'] })
+      client.invalidateQueries({ queryKey: ['coverage-gaps'] })
+      client.invalidateQueries({ queryKey: ['metrics'] })
+    },
+  })
+}
+
 export function useRunEvaluation() {
   const client = useQueryClient()
   return useMutation({

@@ -39,7 +39,7 @@ def test_failure_written_to_experience_memory() -> None:
     top = rows[0]
     assert top["kind"] == "task"
     assert "missing capability" in top["lessons"][0]
-    assert "tool generation unavailable" in top["lessons"]
+    assert not any("unavailable" in lesson for lesson in top["lessons"])
 
 
 def test_registration_adds_enables_edges() -> None:

@@ -9,10 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from app.core.agent.detector import GapSpec
 from app.core.tools.model import ToolStatus
 from app.core.tools.registry import RegistryError, tool_registry
 from app.db import get_session
 from app.models import ToolRecord
+from app.services.generator import tool_generator
 
 router = APIRouter(tags=["tools"])
 
@@ -48,6 +50,14 @@ class ToolRead(BaseModel):
     parent_version: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class GenerateRequest(BaseModel):
+    name_hint: str = Field(min_length=1, max_length=256)
+    description: str = Field(default="", max_length=4000)
+    input_schema: dict[str, str] = Field(default_factory=dict)
+    output_schema: dict[str, str] = Field(default_factory=dict)
+    security_constraints: list[str] = Field(default_factory=list)
 
 
 class ToolAction(BaseModel):
@@ -88,6 +98,26 @@ def create_tool(body: ToolCreate, session: SessionDep) -> ToolRecord:
         )
     except RegistryError as exc:
         raise HTTPException(status_code=422, detail=f"{exc.code}: {str(exc)}") from exc
+
+
+@router.post("/tools/generate", response_model=ToolRead)
+def generate_tool(body: GenerateRequest, session: SessionDep) -> ToolRecord:
+    """Generate (or return) a DRAFT candidate from a capability gap spec.
+
+    Uses the deterministic template strategy; idempotent per capability slug.
+    The candidate must still pass verify/activate before it closes a gap.
+    """
+    tool, _created = tool_generator.generate(
+        session,
+        GapSpec(
+            name_hint=body.name_hint,
+            description=body.description,
+            input_schema=body.input_schema,
+            output_schema=body.output_schema,
+            security_constraints=body.security_constraints,
+        ),
+    )
+    return tool
 
 
 @router.get("/tools", response_model=list[ToolRead])

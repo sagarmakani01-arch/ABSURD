@@ -58,6 +58,12 @@ export const api = {
   tool: (id: string) => request<import('../types/api').ToolDTO>(`/tools/${id}`),
   createTool: (body: Record<string, unknown>) =>
     json<import('../types/api').ToolDTO>('/tools', body),
+  generateTool: (body: {
+    name_hint: string
+    description?: string
+    input_schema?: Record<string, string>
+    output_schema?: Record<string, string>
+  }) => json<import('../types/api').ToolDTO>('/tools/generate', body),
   toolTransition: (id: string, verb: 'verify' | 'activate' | 'reject' | 'deprecate') =>
     json<import('../types/api').ToolDTO>(`/tools/${id}/${verb}`, {}),
 

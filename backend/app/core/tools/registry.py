@@ -86,6 +86,20 @@ class ToolRegistry:
     def get(self, session: Session, tool_id: str) -> ToolRecord | None:
         return session.get(ToolRecord, tool_id)
 
+    def by_capability(self, session: Session, capability: str) -> ToolRecord | None:
+        """First existing tool declaring the capability under any active status.
+
+        Powers generation idempotency: a capability is never generated twice.
+        REJECTED/DEPRECATED tools do not count — a fresh candidate may exist.
+        """
+        for tool in session.scalars(select(ToolRecord)).all():
+            if capability in (tool.capabilities or []) and tool.status not in {
+                ToolStatus.REJECTED.value,
+                ToolStatus.DEPRECATED.value,
+            }:
+                return tool
+        return None
+
     def transition(self, session: Session, tool: ToolRecord, target: ToolStatus) -> ToolRecord:
         """Validate and apply a status transition, emitting the matching event."""
         current = ToolStatus(tool.status)

@@ -109,10 +109,11 @@ yet and the design says so:
 | Experience memory, knowledge graph, tools memory | Implemented & tested |
 | Evolution metrics, failure analysis, quarantine | Implemented & tested |
 | Revision/versioning pipeline (guarded) | Implemented & gated |
-| LLM tool generation / revision generation | **Not implemented** (honest 409s) |
+| Tool generation (deterministic template strategy) | Implemented & tested |
+| LLM-assisted tool / revision generation | **Not implemented** (honest 409s) |
 | Security sandbox + real tool execution | **Not implemented** (specced only) |
 
-Backend test suite: **43 passed** (`backend/tests`). Frontend: typecheck,
+Backend test suite: **47 passed** (`backend/tests`). Frontend: typecheck,
 lint and build green.
 
 ## GETTING STARTED
@@ -151,7 +152,11 @@ gateway. Tests: `cd backend && python -m pytest` from `backend/`.
 - Frontend wiring: app-shell modules now consume the live lifecycle (tasks,
   registry, memory, evaluation, evolution); placeholder panels removed.
   **Done.**
-- Next: LLM generation, sandboxed execution, and semantic matching (docs per
+- Phase 12: deterministic tool generation (template strategy) — tasks seed
+  DRAFT candidates for gaps; registering a candidate closes the loop.
+  **Done.**
+- Next: sandboxed execution (runs a tool's tests for real behavioral
+  verification), then LLM-assisted generation and semantic matching (docs per
   module).
 
 ## DOCS

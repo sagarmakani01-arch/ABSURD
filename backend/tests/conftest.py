@@ -15,11 +15,13 @@ os.environ["ABSURD_DATABASE_URL"] = "sqlite:///" + os.path.join(_TMP_DIR, "test.
 import pytest  # noqa: E402
 
 from app.db import Base, engine  # noqa: E402
+from app.events import bus  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _reset_db():
-    """Fresh schema per test — SQLite drop/create is cheap."""
+    """Fresh schema and fresh event history per test."""
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    bus.reset()
     yield

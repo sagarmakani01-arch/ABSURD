@@ -144,7 +144,7 @@ class CapabilityDetector:
         matches) scores 2. Lexical name presence alone scores 1 (kept for v0
         compatibility), as does a single-direction IO match.
         """
-        cap_match = any(tag.lower() in step.description.lower() for tag in tool.capabilities)
+        cap_match = any(self._tagged(tag, step.description) for tag in tool.capabilities)
         lexical = cap_match or self._name_match(tool, step.description)
 
         # No schema declared on the step: lexical match is full coverage (v0).
@@ -165,7 +165,21 @@ class CapabilityDetector:
 
     @staticmethod
     def _name_match(tool: RegistryTool, description: str) -> bool:
-        return tool.name.lower() in description.lower()
+        return CapabilityDetector._tagged(tool.name, description)
+
+    @staticmethod
+    def _tagged(tag: str, description: str) -> bool:
+        """Word-bag lexical match: 'parse_html_documents' hits 'parse html documents'.
+
+        Slugified capability/name tokens (generated tools) are normalized to
+        words on both sides so an underscored capability closes the gap that
+        produced it.
+        """
+        words = re.split(r"\W+", tag.lower())
+        if not words:
+            return False
+        target = re.split(r"\W+", description.lower())
+        return all(w in target for w in words)
 
     @staticmethod
     def _compatible(expected: dict[str, str], schema: dict[str, str]) -> bool:
