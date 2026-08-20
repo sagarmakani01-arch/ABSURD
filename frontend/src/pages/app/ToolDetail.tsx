@@ -1,13 +1,25 @@
-/** /app/tools/:id — tool details. */
+/** /app/tools/:id — tool details + lifecycle actions. */
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { useTool } from '../../api/hooks'
-import { ModulePending } from '../../app/AppUI'
-import { Chip, SpecRow } from '../../components/ui/primitives'
+import { useRunEvaluation, useTool, useToolTransition } from '../../api/hooks'
+import { PageHeader } from '../../app/AppUI'
+import { Button, Chip, SpecRow } from '../../components/ui/primitives'
+
+const ACTIONS: Array<{ verb: 'verify' | 'activate' | 'reject' | 'deprecate'; label: string; when: string }> = [
+  { verb: 'verify', label: 'VERIFY', when: 'DRAFT' },
+  { verb: 'activate', label: 'ACTIVATE', when: 'VERIFIED' },
+  { verb: 'reject', label: 'REJECT', when: 'DRAFT' },
+  { verb: 'deprecate', label: 'DEPRECATE', when: 'REGISTERED' },
+]
+
+const toneFor = (status: string) =>
+  status === 'REGISTERED' ? 'ok' : status === 'REJECTED' || status === 'DEPRECATED' ? 'err' : 'neutral'
 
 export function ToolDetail() {
   const { id = '' } = useParams()
   const tool = useTool(id)
+  const transition = useToolTransition()
+  const evaluate = useRunEvaluation()
 
   return (
     <div>
@@ -16,19 +28,65 @@ export function ToolDetail() {
       </Link>
 
       {tool.data === undefined ? (
-        <ModulePending
-          name={`TOOL ${id.toUpperCase()}`}
-          shipsIn="PHASE 7"
-          contract={['source_code', 'tests', 'benchmark_results', 'security_metadata', 'provenance', 'parent_version']}
-        />
+        <PageHeader code="02" title="TOOL" sub="" />
       ) : (
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', marginBottom: 24 }}>
             <h1 style={{ fontSize: 'var(--fs-32)', fontWeight: 600, fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}>
               {tool.data.name}
             </h1>
-            <Chip label={tool.data.status} tone={tool.data.status === 'REGISTERED' ? 'ok' : 'neutral'} />
+            <Chip label={tool.data.status} tone={toneFor(tool.data.status)} />
           </div>
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
+            {ACTIONS.filter((a) => a.when === tool.data?.status).map((a) => (
+              <Button
+                key={a.verb}
+                variant={a.verb === 'deprecate' ? 'ghost' : 'primary'}
+                onClick={() => transition.mutate({ id, verb: a.verb })}
+                disabled={transition.isPending}
+              >
+                {a.label}
+              </Button>
+            ))}
+            <Button
+              variant="ghost"
+              onClick={() => evaluate.mutate(id)}
+              disabled={evaluate.isPending}
+            >
+              RUN STRUCTURAL EVALUATION
+            </Button>
+          </div>
+
+          {transition.isError && transition.error instanceof Error && (
+            <pre style={{ color: 'var(--err)', fontSize: 'var(--fs-11)', margin: '0 0 14px' }}>{transition.error.message}</pre>
+          )}
+          {evaluate.isError && evaluate.error instanceof Error && (
+            <pre style={{ color: 'var(--err)', fontSize: 'var(--fs-11)', margin: '0 0 14px' }}>{evaluate.error.message}</pre>
+          )}
+
+          {evaluate.data && (
+            <div className="instr-panel" style={{ padding: 22, marginBottom: 18 }}>
+              <div className="sys-label" style={{ marginBottom: 12 }}>STRUCTURAL GATE</div>
+              <SpecRow label="verification_score">
+                {evaluate.data.verification_score.toFixed(3)}
+              </SpecRow>
+              <SpecRow label="checks">
+                {evaluate.data.checks_passed} / {evaluate.data.checks_total}
+              </SpecRow>
+              <SpecRow label="behavioral">
+                {evaluate.data.behavioral.available ? 'AVAILABLE' : 'NOT IMPLEMENTED'}
+              </SpecRow>
+              {evaluate.data.checks.map((c) => (
+                <SpecRow key={c.name} label={c.name}>
+                  <span style={{ color: c.passed ? 'var(--ok)' : 'var(--err)' }}>
+                    {c.passed ? 'PASS' : 'FAIL'}
+                  </span>
+                </SpecRow>
+              ))}
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
             <div className="instr-panel" style={{ padding: 22 }}>
               <div className="sys-label" style={{ marginBottom: 12 }}>DEFINITION</div>
@@ -43,6 +101,13 @@ export function ToolDetail() {
               <SpecRow label="benchmark">{JSON.stringify(tool.data.benchmark_results)}</SpecRow>
               <SpecRow label="security">{JSON.stringify(tool.data.security_metadata)}</SpecRow>
               <SpecRow label="created">{tool.data.created_at}</SpecRow>
+            </div>
+            <div className="instr-panel" style={{ padding: 22 }}>
+              <div className="sys-label" style={{ marginBottom: 12 }}>SCHEMA & SOURCE</div>
+              <SpecRow label="input_schema">{JSON.stringify(tool.data.input_schema)}</SpecRow>
+              <SpecRow label="output_schema">{JSON.stringify(tool.data.output_schema)}</SpecRow>
+              <SpecRow label="source_code">{tool.data.source_code ? `${tool.data.source_code.length} chars` : '—'}</SpecRow>
+              <SpecRow label="tests">{tool.data.tests.length}</SpecRow>
             </div>
           </div>
         </>

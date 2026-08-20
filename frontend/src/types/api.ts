@@ -35,7 +35,7 @@ export interface TaskDTO {
   status: string
   context: Record<string, unknown>
   result: Record<string, unknown> | null
-  error: string | null
+  error: Record<string, unknown> | null
   created_at: string
   updated_at: string
 }
@@ -60,4 +60,60 @@ export interface SimEvent {
   type: string
   payload: Record<string, unknown>
   sequence: number
+}
+
+/** Append-only Experience Memory record (Phase 9). */
+export interface ExperienceDTO {
+  id: string
+  kind: string
+  task_id: string | null
+  input: Record<string, unknown>
+  outcome: string
+  result: Record<string, unknown> | null
+  lessons: string[]
+  created_at: string
+}
+
+/** Knowledge Graph edge (Phase 9). */
+export interface GraphEdgeDTO {
+  id: string
+  subject: string
+  relation: string
+  target: string
+  payload: Record<string, unknown>
+  created_at: string
+}
+
+/** Uncovered capability requirement per task (Phase 9). */
+export interface CoverageGapDTO {
+  task_id: string
+  capability: string
+  covered: boolean
+}
+
+/** Evolution loop dashboard metrics (Phase 9/10). */
+export interface MetricsDTO {
+  tasks_total: number
+  tasks_failed: number
+  task_failure_rate: number
+  tools_registered: number
+  tools_generated: number
+  tools_quarantined: number
+  executions: number
+  experiences: number
+  failures_by_kind: Record<string, number>
+  gap_edges: number
+  gap_close_rate: number | null
+  revisions_total: number
+  revision_available: boolean
+}
+
+/** POST /evaluations result: structural gate only (Phase 9). */
+export interface EvalResultDTO {
+  tool_id: string
+  verification_score: number
+  checks_passed: number
+  checks_total: number
+  checks: Array<{ name: string; passed: boolean; detail?: string }>
+  behavioral: { available: boolean; reason: string }
 }

@@ -148,8 +148,11 @@ gateway. Tests: `cd backend && python -m pytest` from `backend/`.
 - Phase 9: memory system, evaluation pipeline, evolution loop. **Done.**
 - Phase 10: revision/versioning loop with honest gating. **Done.**
 - Phase 11: this documentation. **Done.**
-- Next: frontend wiring against the real lifecycle, then LLM generation,
-  sandboxed execution, and semantic matching (docs per module).
+- Frontend wiring: app-shell modules now consume the live lifecycle (tasks,
+  registry, memory, evaluation, evolution); placeholder panels removed.
+  **Done.**
+- Next: LLM generation, sandboxed execution, and semantic matching (docs per
+  module).
 
 ## DOCS
 

@@ -1,15 +1,21 @@
-/** /app/tasks — task execution history. */
+/** /app/tasks — task execution history + submission. */
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useExecutions, useTasks } from '../../api/hooks'
-import { PageHeader, ModulePending } from '../../app/AppUI'
-import { Chip } from '../../components/ui/primitives'
+import { useCreateTask, useExecutions, useTasks } from '../../api/hooks'
+import { PageHeader } from '../../app/AppUI'
+import { Button, Chip } from '../../components/ui/primitives'
 
 const toneFor = (status: string) =>
-  status === 'COMPLETED' ? 'ok' : status === 'FAILED' ? 'err' : status === 'CREATED' || status === 'PLANNING' ? 'signal' : 'neutral'
+  status === 'COMPLETED' ? 'ok' : status === 'FAILED' ? 'err' : status === 'CREATED' || status === 'ANALYZED' ? 'signal' : 'neutral'
 
 export function Tasks() {
   const tasks = useTasks()
   const executions = useExecutions()
+  const createTask = useCreateTask()
+  const [goal, setGoal] = useState('')
+
+  const errorKind = (t: { error: Record<string, unknown> | null }) =>
+    t.error && typeof t.error.kind === 'string' ? t.error.kind : null
 
   return (
     <>
@@ -18,12 +24,52 @@ export function Tasks() {
         title="TASKS"
         sub="Every task, its lifecycle transitions, and the executions it triggered."
       />
+
+      <form
+        className="instr-panel"
+        style={{ padding: 20, marginBottom: 22 }}
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!goal.trim()) return
+          createTask.mutate({ goal: goal.trim() })
+          setGoal('')
+        }}
+      >
+        <div className="sys-label" style={{ marginBottom: 10 }}>SUBMIT TASK</div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <input
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            placeholder="goal, e.g. fetch weather data"
+            style={{
+              flex: 1,
+              background: 'var(--bg-2)',
+              border: '1px solid var(--line-1)',
+              color: 'var(--text-hi)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 'var(--fs-12)',
+              padding: '0 14px',
+              height: 36,
+              borderRadius: 'var(--radius-1)',
+              outline: 'none',
+            }}
+          />
+          <Button type="submit" disabled={!goal.trim() || createTask.isPending}>RUN</Button>
+        </div>
+        {createTask.isError && createTask.error instanceof Error && (
+          <pre style={{ color: 'var(--err)', fontSize: 'var(--fs-11)', margin: '10px 0 0' }}>
+            {createTask.error.message}
+          </pre>
+        )}
+      </form>
+
       {tasks.data === undefined ? (
-        <ModulePending
-          name="TASK HISTORY"
-          shipsIn="PHASE 6"
-          contract={['id', 'goal', 'status', 'context', 'result', 'error']}
-        />
+        <div className="instr-panel" style={{ padding: 26 }}>
+          <div className="sys-label" style={{ marginBottom: 8 }}>TASK HISTORY</div>
+          <p style={{ color: 'var(--text-low)', margin: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-11)' }}>
+            LOADING…
+          </p>
+        </div>
       ) : tasks.data.length === 0 ? (
         <div className="instr-panel" style={{ padding: 26 }}>
           <div className="sys-label" style={{ marginBottom: 8 }}>TASK HISTORY</div>
@@ -33,6 +79,7 @@ export function Tasks() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {tasks.data.map((t) => {
             const run = executions.data?.filter((e) => e.task_id === t.id) ?? []
+            const kind = errorKind(t)
             return (
               <Link
                 key={t.id}
@@ -44,7 +91,10 @@ export function Tasks() {
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-12)', letterSpacing: '0.06em', color: 'var(--text-hi)' }}>
                       {t.goal.slice(0, 90)}
                     </span>
-                    <Chip label={t.status} tone={toneFor(t.status)} />
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      {kind && <Chip label={kind} tone="warn" />}
+                      <Chip label={t.status} tone={toneFor(t.status)} />
+                    </div>
                   </div>
                   <div className="sys-label" style={{ marginTop: 10 }}>
                     {t.id} · {run.length} EXECUTIONS · {t.created_at}
