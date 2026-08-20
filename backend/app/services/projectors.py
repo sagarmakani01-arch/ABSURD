@@ -67,6 +67,8 @@ def _write_task_failure(session: Session, event: Event) -> None:
     lessons = [f"missing capability: {m}" for m in missing]
     if not event.payload.get("generation_available", True):
         lessons.append("tool generation unavailable")
+    if event.payload.get("code"):
+        lessons.append(f"tool execution failed: {event.payload['code']}")
     experience_memory.add(
         session,
         kind="task",
@@ -109,10 +111,34 @@ def _write_enables_edges(session: Session, event: Event) -> None:
         )
 
 
+def _write_execution_experience(session: Session, event: Event) -> None:
+    """Every finished tool execution becomes a `tool_execution` experience."""
+    status = str(event.payload.get("status", ""))
+    code = event.payload.get("code")
+    lessons = []
+    if status != "COMPLETED" and code:
+        lessons.append(f"tool execution failed: {code}")
+    experience_memory.add(
+        session,
+        kind="tool_execution",
+        outcome="success" if status == "COMPLETED" else "failure",
+        task_id=event.payload.get("task_id"),
+        input_data={"event_sequence": event.sequence},
+        result={
+            "tool_id": event.payload.get("tool_id"),
+            "tool_version": event.payload.get("tool_version"),
+            "status": status,
+            "code": code,
+        },
+        lessons=lessons,
+    )
+
+
 # Each owned event type is handled by exactly one projection function.
 _HANDLERS: dict[EventType, Callable[[Session, Event], None]] = {
     EventType.TASK_COMPLETED: _write_task_success,
     EventType.TASK_FAILED: _write_task_failure,
     EventType.CAPABILITY_GAP_DETECTED: _write_requires_edges,
     EventType.TOOL_REGISTERED: _write_enables_edges,
+    EventType.TOOL_EXECUTION_FINISHED: _write_execution_experience,
 }

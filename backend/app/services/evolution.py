@@ -78,9 +78,13 @@ class EvolutionService:
     def quarantine(self, session: Session) -> list[ToolRecord]:
         """Tools with >=3 consecutive failed executions leave the registry.
 
-        Not triggered until real executions exist (sandbox phase).
+        Fired by the engine after real execution rounds once the sandbox
+        phase produces failures (timeouts, policy rejections, validation or
+        runtime errors all count as failed executions).
         """
-        executed = session.scalars(select(ExecutionRecord)).all()
+        executed = session.scalars(
+            select(ExecutionRecord).order_by(ExecutionRecord.started_at)
+        ).all()
         consecutive: dict[str, int] = {}
         for row in executed:  # rows are chronological; track running streak
             if row.status == "COMPLETED":
@@ -194,6 +198,9 @@ class EvolutionService:
         revisions_total = sum(
             1 for event in recent if event.type is EventType.TOOL_REVISION_STARTED
         )
+        tools_quarantined = sum(
+            1 for event in recent if event.type is EventType.TOOL_QUARANTINED
+        )
 
         gaps = knowledge_graph.coverage_gaps(session)
         closed = sum(1 for gap in gaps if gap["covered"])
@@ -207,7 +214,7 @@ class EvolutionService:
             "tools_generated": tools_generated,
             "generation_available": tool_generator.generate_available(),
             "generation_strategies": list(AVAILABLE_STRATEGIES),
-            "tools_quarantined": 0,
+            "tools_quarantined": tools_quarantined,
             "executions": executions,
             "experiences": experiences,
             "failures_by_kind": failures_by_kind,

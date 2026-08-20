@@ -171,14 +171,14 @@ class CapabilityDetector:
     def _tagged(tag: str, description: str) -> bool:
         """Word-bag lexical match: 'parse_html_documents' hits 'parse html documents'.
 
-        Slugified capability/name tokens (generated tools) are normalized to
-        words on both sides so an underscored capability closes the gap that
-        produced it.
+        Both sides are normalized to words over whitespace, punctuation, and
+        underscores (underscores are word chars to `\\W` but must split too),
+        so an underscored capability/name closes the gap that produced it.
         """
-        words = re.split(r"\W+", tag.lower())
+        words = re.split(r"[\W_]+", tag.lower())
         if not words:
             return False
-        target = re.split(r"\W+", description.lower())
+        target = re.split(r"[\W_]+", description.lower())
         return all(w in target for w in words)
 
     @staticmethod

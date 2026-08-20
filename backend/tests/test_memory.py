@@ -113,12 +113,55 @@ def test_evolution_metrics_reflect_activity() -> None:
     assert "failure.analyzed" in types
 
 
-def test_quarantine_dormant_until_real_executions() -> None:
-    _register_and_activate()
-    quarantine = None
-    for _ in range(5):
-        # Surrogate consecutive failures are NOT injected; quarantine must
-        # stay dormant since ExecutionRecord never has failures yet.
-        ...
+def test_quarantine_after_consecutive_failures() -> None:
+    """A REGISTERED tool that fails 3 executions in a row leaves the registry
+    via the evolution loop's quarantine (real executions, Phase 13b)."""
+    tool = client.post(
+        "/api/v1/tools",
+        json={
+            **SAMPLE,
+            "name": "crashing_tool",
+            "description": "Crashes on every call.",
+            "source_code": "def crashing_tool(inputs: dict) -> dict:\n    raise ValueError('nope')\n",
+        },
+    ).json()
+    client.post(f"/api/v1/tools/{tool['id']}/verify")
+    client.post(f"/api/v1/tools/{tool['id']}/activate")
+
+    goal = "use the crashing tool to add two numbers"
+    for _ in range(3):
+        task = _submit(goal, {"inputs": [{"a": 1, "b": 2}]})
+        assert task["status"] == "FAILED"
+        assert task["error"]["kind"] == "TOOL_EXECUTION_FAILED"
+        assert task["error"]["code"] == "runtime_error"
+
+    fetched = client.get(f"/api/v1/tools/{tool['id']}").json()
+    assert fetched["status"] == "DEPRECATED"
+
     metrics = client.get("/api/v1/evolution/metrics").json()
-    assert metrics["tools_quarantined"] == 0
+    assert metrics["tools_quarantined"] == 1
+    assert metrics["executions"] == 3
+
+    events = [e["type"] for e in client.get("/api/v1/evolution/events").json()]
+    assert "tool.quarantined" in events
+
+    usage = client.get("/api/v1/memory/tools-usage").json()
+    assert usage[tool["id"]]["usage_count"] == 3
+    assert usage[tool["id"]]["success_rate"] == 0.0
+
+    experiences = client.get(
+        "/api/v1/memory/experience", params={"kind": "tool_execution", "outcome": "failure"}
+    ).json()
+    assert len(experiences) == 3
+
+    # The quarantined tool no longer covers the step: the next attempt fails
+    # NO_CAPABILITY (no execution happens) and generation seeds a replacement
+    # DRAFT candidate — the loop heals itself.
+    task = _submit(goal, {"inputs": [{"a": 1, "b": 2}]})
+    assert task["status"] == "FAILED"
+    assert task["error"]["kind"] == "NO_CAPABILITY"
+    assert client.get("/api/v1/evolution/metrics").json()["executions"] == 3
+    assert any(
+        t["name"] == "use_the_crashing" and t["status"] == "DRAFT"
+        for t in client.get("/api/v1/tools").json()
+    )

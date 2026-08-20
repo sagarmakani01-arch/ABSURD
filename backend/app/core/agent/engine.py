@@ -1,20 +1,28 @@
 """Agent engine — owns the deterministic execution loop for a task.
 
-Phase 6 loop: analyze → plan → detect capability → verdict.
-Phase 7 inserts execution; Phase 8 inserts tool generation for gaps.
+Phase 6 loop: analyze -> plan -> detect capability -> verdict.
+Phase 7: registry lifecycle; Phase 8: tool generation for gaps.
+Phase 13b: covered plans are actually executed — every covered step runs its
+matched REGISTERED tool in the sandbox with the task's input hints, and the
+task's verdict reflects the real outcomes (EXECUTED on full success,
+TOOL_EXECUTION_FAILED / TOOL_NOT_AVAILABLE on the first failure). Tools that
+fail 3 executions in a row are quarantined by the evolution loop.
 """
 
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.core.agent.detector import CapabilityDetector
-from app.core.agent.planner import Planner
+from app.core.agent.detector import CapabilityDetector, CapabilityPlan, Coverage
+from app.core.agent.planner import Plan, Planner
 from app.core.agent.reasoner import Reasoner
+from app.core.tools.model import ToolStatus
 from app.core.tools.registry import tool_registry
 from app.events import EventType, bus
-from app.models import TaskRecord
+from app.models import TaskRecord, ToolRecord
+from app.services.evolution import evolution_service
 from app.services.generator import tool_generator
+from app.services.sandbox import sandbox
 
 
 class AgentEngine:
@@ -87,11 +95,10 @@ class AgentEngine:
             )
 
         verdict = self.reasoner.synthesize(plan, capabilities, generation_available)
-        task.status = "FAILED" if verdict.error else "COMPLETED"
-        task.result = verdict.task_result
-        task.error = verdict.error
-
         if verdict.error:
+            task.status = "FAILED"
+            task.result = verdict.task_result
+            task.error = verdict.error
             bus.publish(
                 EventType.TASK_FAILED,
                 {
@@ -102,12 +109,94 @@ class AgentEngine:
                 },
             )
         else:
-            bus.publish(EventType.TASK_COMPLETED, {"task_id": task.id, "confidence": verdict.confidence})
+            self._execute_steps(session, task, plan, capabilities)
 
         session.add(task)
         session.commit()
         session.refresh(task)
         return task
+
+    def _execute_steps(
+        self, session: Session, task: TaskRecord, plan: Plan, capabilities: CapabilityPlan
+    ) -> None:
+        """Run every covered step through the sandbox; verdict reflects reality."""
+        step_inputs = self._resolve_step_inputs(plan, task.context)
+        outputs: list[dict[str, object]] = []
+        for index, (step, entry) in enumerate(zip(plan.steps, capabilities.entries)):
+            tool_id = entry.matched_tool_ids[0] if entry.matched_tool_ids else None
+            tool = session.get(ToolRecord, tool_id) if tool_id else None
+            if tool is None or tool.status != ToolStatus.REGISTERED.value:
+                self._fail(
+                    session,
+                    task,
+                    "TOOL_NOT_AVAILABLE",
+                    {
+                        "tool_id": tool_id or "",
+                        "step_id": step.id,
+                        "detail": f"matched tool {tool_id} is not registered",
+                    },
+                )
+                return
+            record = sandbox.execute(session, tool, step_inputs[index], task_id=task.id)
+            if record.status != "COMPLETED":
+                code = record.error.get("code") if record.error else "execution_failed"
+                self._fail(
+                    session,
+                    task,
+                    "TOOL_EXECUTION_FAILED",
+                    {
+                        "tool_id": tool.id,
+                        "tool_version": tool.version,
+                        "step_id": step.id,
+                        "execution_status": record.status,
+                        "code": code,
+                        "detail": (record.error or {}).get("message", "execution failed"),
+                    },
+                )
+                return
+            outputs.append({"step_id": step.id, "tool_id": tool.id, "output": record.output})
+
+        evolution_service.quarantine(session)
+        task.status = "COMPLETED"
+        task.error = None
+        task.result = {
+            "kind": "EXECUTED",
+            "detail": "All steps executed in the sandbox; outputs recorded.",
+            "steps": len(plan.steps),
+            "outputs": outputs,
+        }
+        bus.publish(
+            EventType.TASK_COMPLETED,
+            {"task_id": task.id, "confidence": 1.0, "executed": True, "outputs": outputs},
+        )
+
+    def _fail(self, session: Session, task: TaskRecord, kind: str, extra: dict[str, object]) -> None:
+        """Honest structured failure on the first thing that went wrong."""
+        evolution_service.quarantine(session)
+        task.status = "FAILED"
+        task.result = None
+        task.error = {"kind": kind, **extra}
+        bus.publish(
+            EventType.TASK_FAILED,
+            {"task_id": task.id, "kind": kind, "missing": [], **extra},
+        )
+
+    @staticmethod
+    def _resolve_step_inputs(plan: Plan, context: dict[str, object] | None) -> list[dict[str, object]]:
+        """Per-step concrete input values from optional `context["inputs"]`.
+
+        The list is aligned with the plan steps; unknown keys are passed
+        through as-is and the sandbox validates against the tool's declared
+        input schema. With no hints a step executes with `{}` — tools that
+        require inputs then fail input_validation rather than fabricating data.
+        """
+        resolved: list[dict[str, object]] = [{} for _ in plan.steps]
+        hints = context.get("inputs") if isinstance(context, dict) else None
+        if isinstance(hints, list):
+            for index, hint in enumerate(hints[: len(plan.steps)]):
+                if isinstance(hint, dict):
+                    resolved[index] = {str(k): v for k, v in hint.items()}
+        return resolved
 
 
 agent_engine = AgentEngine()

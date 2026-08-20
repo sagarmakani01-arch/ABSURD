@@ -58,24 +58,44 @@ def test_engine_auto_generates_candidates_for_gaps() -> None:
 
 
 def test_registering_generated_candidate_closes_the_loop() -> None:
-    """gap -> auto-generated DRAFT -> verify -> activate -> task COMPLETED."""
+    """gap -> auto-generated DRAFT -> verify -> activate -> task COMPLETED.
+
+    With real sandbox execution (Phase 13b) the template candidate can only
+    fulfill the step when its outputs are echoable from the inputs, so the
+    loop closes with a normalize_text gap whose output key is an input key.
+    """
     expected_io = [
-        {"inputs": {"html": "str"}, "outputs": {"headings": "list"}}
+        {"inputs": {"text": "str", "trimmed": "str"}, "outputs": {"trimmed": "str"}}
     ]
-    _submit("parse html documents", expected_io)
+    task = client.post(
+        "/api/v1/tasks",
+        json={"goal": "normalize text", "context": {"expected_io": expected_io}},
+    ).json()
+    assert task["status"] == "FAILED"
     drafts = client.get("/api/v1/tools", params={"status": "DRAFT"}).json()
-    candidate = next(t for t in drafts if t["name"] == "parse_html_documents")
+    candidate = next(t for t in drafts if t["name"] == "normalize_text")
 
     gaps = client.get("/api/v1/memory/graph/coverage-gaps").json()
-    assert any(g["task_id"] and not g["covered"] for g in gaps)
+    assert any(g["task_id"] == task["id"] and not g["covered"] for g in gaps)
 
     client.post(f"/api/v1/tools/{candidate['id']}/verify")
     registered = client.post(f"/api/v1/tools/{candidate['id']}/activate").json()
     assert registered["status"] == "REGISTERED"
 
     gaps = client.get("/api/v1/memory/graph/coverage-gaps").json()
-    assert any(g["covered"] for g in gaps)
+    assert any(g["task_id"] == task["id"] and g["covered"] for g in gaps)
 
-    rerun = _submit("parse html documents", expected_io)
+    rerun = client.post(
+        "/api/v1/tasks",
+        json={
+            "goal": "normalize text",
+            "context": {
+                "expected_io": expected_io,
+                "inputs": [{"text": "raw", "trimmed": "clean"}],
+            },
+        },
+    ).json()
     assert rerun["status"] == "COMPLETED"
     assert rerun["error"] is None
+    assert rerun["result"]["kind"] == "EXECUTED"
+    assert rerun["result"]["outputs"][0]["output"] == {"trimmed": "clean"}

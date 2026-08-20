@@ -92,22 +92,34 @@ def test_list_and_get() -> None:
 
 
 def test_registered_tool_covers_capability() -> None:
-    """A REGISTERED tool must make the capability detector classify steps as covered."""
-    tool = _register()
+    """A REGISTERED tool makes the detector classify steps as covered and the
+    engine actually executes the step in the sandbox (Phase 13b)."""
+    tool = _register(
+        source_code=(
+            "def calculator(inputs: dict) -> dict:\n"
+            "    return {\"result\": inputs['a'] + inputs['b']}\n"
+        )
+    )
     client.post(f"/api/v1/tools/{tool['id']}/verify")
     client.post(f"/api/v1/tools/{tool['id']}/activate")
 
     response = client.post(
         "/api/v1/tasks",
-        json={"goal": "use the calculator to add two numbers", "context": {}},
+        json={
+            "goal": "use the calculator to add two numbers",
+            "context": {"inputs": [{"a": 2, "b": 3}]},
+        },
     )
     assert response.status_code == 201
     body = response.json()
-    # Phase 6 reasoner has no executor yet: a covered plan completes with the
-    # honest PLANNED placeholder result instead of a fabricated output.
     assert body["status"] == "COMPLETED"
-    assert body["result"]["kind"] == "PLANNED"
-    assert body["result"]["detail"] == "All steps are covered by registered tools; tool execution is not implemented yet (sandbox phase)."
+    assert body["error"] is None
+    assert body["result"]["kind"] == "EXECUTED"
+    assert body["result"]["outputs"][0]["output"] == {"result": 5}
+
+    executions = client.get("/api/v1/executions").json()
+    assert executions and executions[0]["task_id"] == body["id"]
+    assert executions[0]["status"] == "COMPLETED"
 
 
 def test_events_for_lifecycle() -> None:

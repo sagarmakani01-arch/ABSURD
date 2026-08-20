@@ -84,7 +84,7 @@ def list_executions(
     session: SessionDep,
     task_id: Annotated[str | None, Query()] = None,
 ) -> list[ExecutionRecord]:
-    """Tool execution history. Empty until the execution pipeline ships (Phase 7)."""
+    """Tool execution history, per tool and task (sandbox phase)."""
     if task_id:
         return list(session.scalars(select(ExecutionRecord).where(ExecutionRecord.task_id == task_id)))
     return list(session.scalars(select(ExecutionRecord)))

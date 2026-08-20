@@ -71,8 +71,7 @@ class Reasoner:
             confidence=1.0,
             task_result={
                 "kind": "PLANNED",
-                "detail": "All steps are covered by registered tools; "
-                "tool execution is not implemented yet (sandbox phase).",
+                "detail": "All steps are covered; the engine executes them in the sandbox.",
                 "steps": len(plan.steps),
             },
             step_feedback=feedback,

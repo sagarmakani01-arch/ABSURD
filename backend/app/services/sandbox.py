@@ -241,7 +241,13 @@ class ToolSandbox:
             )
         bus.publish(
             EventType.TOOL_EXECUTION_FINISHED,
-            {"tool_id": tool.id, "tool_version": tool.version, "task_id": task_id, "status": status},
+            {
+                "tool_id": tool.id,
+                "tool_version": tool.version,
+                "task_id": task_id,
+                "status": status,
+                "code": error.get("code") if error else None,
+            },
         )
         return record
 
