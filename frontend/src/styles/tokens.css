@@ -1,0 +1,190 @@
+/* ============================================================
+   ABSURD DESIGN TOKENS — Phase 3
+   Visual language: computational research laboratory.
+   Swiss grid rationality + OLED dark + precision instrumentation.
+   No gradients as decoration. Motion communicates state.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* --- Surfaces (layered, contiguous, no glass) --- */
+  --bg-0: #08080a; /* page */
+  --bg-1: #0e0f12; /* surface */
+  --bg-2: #14161b; /* raised */
+  --bg-3: #1a1d24; /* hover / active */
+
+  /* --- Lines --- */
+  --line-0: #1b1e24; /* structural grid lines */
+  --line-1: #24272f; /* borders */
+  --line-2: #333844; /* strong borders */
+
+  /* --- Text (warm paper on deep graphite) --- */
+  --text-hi: #ecebe4; /* primary */
+  --text-mid: #9aa0ab; /* secondary */
+  --text-low: #5d636e; /* tertiary / disabled */
+
+  /* --- States (desaturated, instrument-grade) --- */
+  --signal: #e0b15c; /* chamber amber — the single accent */
+  --signal-dim: rgba(224, 177, 92, 0.14);
+  --ok: #8fae83; /* verified / registered */
+  --ok-dim: rgba(143, 174, 131, 0.14);
+  --warn: #c98f5b; /* testing / bench */
+  --err: #c65f66; /* failed/rejected */
+  --err-dim: rgba(198, 95, 102, 0.14);
+  --info: #8fa3c2; /* analysis */
+
+  /* --- Spacing (8pt Swiss grid, 4px floor) --- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 32px;
+  --sp-8: 40px;
+  --sp-9: 48px;
+  --sp-10: 64px;
+  --sp-11: 80px;
+  --sp-12: 96px;
+
+  /* --- Type scale (modular, minor third) --- */
+  --fs-11: 0.6875rem; /* system captions */
+  --fs-12: 0.75rem; /* system body / mono labels */
+  --fs-13: 0.8125rem; /* small body */
+  --fs-14: 0.875rem; /* body */
+  --fs-16: 1rem; /* lead */
+  --fs-18: 1.125rem;
+  --fs-20: 1.25rem;
+  --fs-24: 1.5rem;
+  --fs-32: 2rem;
+  --fs-44: 2.75rem;
+  --fs-56: 3.5rem;
+  --fs-72: 4.5rem;
+  --fs-96: 6rem;
+
+  --tracking-mono: 0.14em;
+  --tracking-wide: 0.08em;
+
+  /* --- Motion (see styles/motion.ts for JS presets) --- */
+  --dur-fast: 120ms;
+  --dur-med: 200ms;
+  --dur-slow: 320ms;
+  --dur-film: 800ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasize: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* --- Geometry --- */
+  --radius-1: 2px;
+  --radius-2: 4px;
+  --radius-3: 6px;
+  --hairline: 1px;
+
+  /* --- Depth (shadows only where physically necessary) --- */
+  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --shadow-raise: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+/* --- Base --- */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg-0);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-0);
+  color: var(--text-hi);
+  font-family: var(--font-body);
+  font-size: var(--fs-14);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.08;
+  margin: 0;
+}
+
+code,
+kbd {
+  font-family: var(--font-mono);
+}
+
+::selection {
+  background: var(--signal-dim);
+  color: var(--text-hi);
+}
+
+/* --- Focus (keyboard, always visible) --- */
+
+:focus-visible {
+  outline: var(--hairline) solid var(--signal);
+  outline-offset: 2px;
+}
+
+/* --- Reduced motion: cut all non-essential motion --- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --- Utility: engineering text elements --- */
+
+.sys-label {
+  font-family: var(--font-mono);
+  font-size: var(--fs-11);
+  letter-spacing: var(--tracking-mono);
+  text-transform: uppercase;
+  color: var(--text-low);
+}
+
+.sys-label--signal {
+  color: var(--signal);
+}
+
+/* --- Utility: hairline frame for instrumentation panels --- */
+
+.instr-panel {
+  background: var(--bg-1);
+  border: var(--hairline) solid var(--line-1);
+  border-radius: var(--radius-2);
+}
+
+.instr-panel--raised {
+  background: var(--bg-2);
+  border-color: var(--line-2);
+}
