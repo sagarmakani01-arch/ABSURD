@@ -82,6 +82,24 @@ export function useToolsUsage() {
   })
 }
 
+export function useCapabilities() {
+  return useQuery({
+    queryKey: ['capabilities'],
+    queryFn: api.capabilities,
+    retry: 1,
+    refetchInterval: 5_000,
+  })
+}
+
+export function useAgents() {
+  return useQuery({
+    queryKey: ['agents'],
+    queryFn: api.agents,
+    retry: 1,
+    refetchInterval: 5_000,
+  })
+}
+
 export function useMetrics() {
   return useQuery({
     queryKey: ['metrics'],
@@ -100,6 +118,16 @@ export function useCreateTask() {
     onSuccess: () => {
       client.invalidateQueries({ queryKey: ['tasks'] })
       client.invalidateQueries({ queryKey: ['metrics'] })
+    },
+  })
+}
+
+export function useCancelTask() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.cancelTask(id),
+    onSettled: () => {
+      client.invalidateQueries({ queryKey: ['tasks'] })
     },
   })
 }
@@ -123,6 +151,20 @@ export function useToolTransition() {
       client.invalidateQueries({ queryKey: ['tools'] })
       client.invalidateQueries({ queryKey: ['tools', tool.id] })
       client.invalidateQueries({ queryKey: ['graph-edges'] })
+      client.invalidateQueries({ queryKey: ['metrics'] })
+    },
+  })
+}
+
+export function useToolDisable() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, disabled }: { id: string; disabled: boolean }) =>
+      disabled ? api.disableTool(id) : api.enableTool(id),
+    onSuccess: (tool) => {
+      client.invalidateQueries({ queryKey: ['tools'] })
+      client.invalidateQueries({ queryKey: ['tools', tool.id] })
+      client.invalidateQueries({ queryKey: ['capabilities'] })
       client.invalidateQueries({ queryKey: ['metrics'] })
     },
   })

@@ -20,9 +20,12 @@ from __future__ import annotations
 import re
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import app.config as config
 from app.core.agent.detector import GapSpec
+from app.core.tools.model import ToolStatus
 from app.core.tools.registry import tool_registry
 from app.events import EventType, bus
 from app.models import ToolRecord
@@ -30,6 +33,15 @@ from app.services.llm import LLMError, llm_service
 
 # Template-based generation is deterministic and needs no model service.
 AVAILABLE_STRATEGIES = ["template"]
+
+
+class GeneratorError(Exception):
+    """Raised when a capability gap cannot or must not be generated."""
+
+    def __init__(self, message: str, code: str = "generation_error") -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
 
 
 class ToolGenerator:
@@ -43,6 +55,20 @@ class ToolGenerator:
             strategies.append("llm")
         return strategies
 
+    def gap_fillable(self, session: Session, capability: str) -> tuple[bool, int]:
+        """`(can_seed, rejected_count)` for a capability slug.
+
+        A capability whose candidates were REJECTED
+        `ABSURD_UNFILLABLE_GAP_THRESHOLD` times (default 2) is declared
+        unfillable: generation is refused so the system stops producing
+        futile candidates for it (loop convergence rule, evolution-loop.md).
+        """
+        rejected = 0
+        for tool in session.scalars(select(ToolRecord)).all():
+            if capability in (tool.capabilities or []) and tool.status == ToolStatus.REJECTED.value:
+                rejected += 1
+        return rejected < config.UNFILLABLE_GAP_THRESHOLD, rejected
+
     def generate(
         self,
         session: Session,
@@ -53,11 +79,26 @@ class ToolGenerator:
         """Idempotently create (or return) a DRAFT candidate for a gap spec.
 
         Returns `(candidate, created)` — `created=False` when a candidate for
-        the same capability slug already exists.
+        the same capability slug already exists. Fails closed with 409 when
+        the capability has been declared unfillable.
         """
         capability = sanitize_name(gap_spec.name_hint or gap_spec.description)
         if tool_registry.by_capability(session, capability):
             return tool_registry.by_capability(session, capability), False
+
+        fillable, rejected = self.gap_fillable(session, capability)
+        if not fillable:
+            bus.publish(
+                EventType.CAPABILITY_GAP_UNFILLABLE,
+                {
+                    "capability": capability,
+                    "rejected_count": rejected,
+                },
+            )
+            raise GeneratorError(
+                f"capability {capability} is unfillable: {rejected} candidates rejected",
+                "capability_unfillable",
+            )
 
         if llm_service.available:
             try:

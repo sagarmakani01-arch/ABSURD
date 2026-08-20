@@ -1,7 +1,7 @@
 /** /app/tools/:id — tool details + lifecycle actions. */
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
-import { useRunEvaluation, useTool, useToolTransition } from '../../api/hooks'
+import { useRunEvaluation, useTool, useToolDisable, useToolTransition } from '../../api/hooks'
 import { PageHeader } from '../../app/AppUI'
 import { Button, Chip, SpecRow } from '../../components/ui/primitives'
 
@@ -19,6 +19,7 @@ export function ToolDetail() {
   const { id = '' } = useParams()
   const tool = useTool(id)
   const transition = useToolTransition()
+  const toggleDisable = useToolDisable()
   const evaluate = useRunEvaluation()
 
   return (
@@ -36,6 +37,10 @@ export function ToolDetail() {
               {tool.data.name}
             </h1>
             <Chip label={tool.data.status} tone={toneFor(tool.data.status)} />
+            {tool.data.disabled && <Chip label="DISABLED" tone="warn" />}
+            {!tool.data.disabled && tool.data.status === 'REGISTERED' && tool.data.confidence < 0.5 && (
+              <Chip label="LOW CONF" tone="warn" />
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
@@ -49,6 +54,13 @@ export function ToolDetail() {
                 {a.label}
               </Button>
             ))}
+            <Button
+              variant="ghost"
+              onClick={() => toggleDisable.mutate({ id, disabled: !tool.data!.disabled })}
+              disabled={toggleDisable.isPending}
+            >
+              {tool.data!.disabled ? 'ENABLE' : 'DISABLE'}
+            </Button>
             <Button
               variant="ghost"
               onClick={() => evaluate.mutate(id)}
@@ -93,6 +105,7 @@ export function ToolDetail() {
             <div className="instr-panel" style={{ padding: 22 }}>
               <div className="sys-label" style={{ marginBottom: 12 }}>DEFINITION</div>
               <SpecRow label="version">{tool.data.version}</SpecRow>
+              <SpecRow label="confidence">{tool.data.confidence.toFixed(3)}</SpecRow>
               <SpecRow label="description">{tool.data.description || '—'}</SpecRow>
               <SpecRow label="capabilities">{tool.data.capabilities.join(' · ') || '—'}</SpecRow>
               <SpecRow label="parent_version">{tool.data.parent_version ?? '—'}</SpecRow>

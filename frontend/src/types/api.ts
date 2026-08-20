@@ -14,6 +14,8 @@ export interface ToolDTO {
   description: string
   version: string
   status: string
+  disabled: boolean
+  confidence: number
   input_schema: Record<string, unknown>
   output_schema: Record<string, unknown>
   source_code: string
@@ -26,6 +28,25 @@ export interface ToolDTO {
   parent_version: string | null
   created_at: string
   updated_at: string
+}
+
+/** Agent configuration record (Phase 14). */
+export interface AgentDTO {
+  id: string
+  name: string
+  planner_strategy: string
+  max_retries: number
+  created_at: string
+  updated_at: string
+}
+
+/** Capability coverage slot: every known capability across all tools (Phase 14). */
+export interface CapabilityDTO {
+  capability: string
+  covered: boolean
+  tool_ids: string[]
+  draft_ids: string[]
+  disabled: string[]
 }
 
 /** Persisted task record (backend Phase 6). */
@@ -99,6 +120,8 @@ export interface MetricsDTO {
   tools_registered: number
   tools_generated: number
   tools_quarantined: number
+  tools_disabled: number
+  unfillable_gaps: number
   executions: number
   experiences: number
   failures_by_kind: Record<string, number>

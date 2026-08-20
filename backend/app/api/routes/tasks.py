@@ -20,6 +20,7 @@ router = APIRouter(tags=["tasks"])
 class TaskCreate(BaseModel):
     goal: str = Field(min_length=1, max_length=2000)
     context: dict[str, object] = Field(default_factory=dict)
+    agent_id: str | None = Field(default=None, max_length=64)
 
 
 class TaskRead(BaseModel):
@@ -28,6 +29,7 @@ class TaskRead(BaseModel):
     id: str
     goal: str
     status: str
+    agent_id: str | None
     context: dict[str, object]
     result: dict[str, object] | None
     error: dict[str, object] | None
@@ -57,8 +59,19 @@ SessionDep = Annotated[Session, Depends(get_session)]
 @router.post("/tasks", response_model=TaskRead, status_code=201)
 def create_task(body: TaskCreate, session: SessionDep) -> TaskRecord:
     """Submit a task; the agent loop runs it synchronously and verdicts."""
-    task = task_manager.create(session, body.goal, body.context)
+    task = task_manager.create(session, body.goal, body.context, agent_id=body.agent_id)
     return task_manager.run(session, task)
+
+
+@router.post("/tasks/{task_id}/cancel", response_model=TaskRead)
+def cancel_task(task_id: str, session: SessionDep) -> TaskRecord:
+    """Request cancellation; the engine honours it between steps."""
+    task = task_manager.cancel(session, task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="task not found")
+    if task.status != "CANCELLED":
+        raise HTTPException(status_code=422, detail=f"task is {task.status}; only in-flight tasks cancel")
+    return task
 
 
 @router.get("/tasks", response_model=list[TaskRead])

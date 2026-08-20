@@ -24,6 +24,7 @@ class EventType(StrEnum):
     TASK_ANALYZED = "task.analyzed"
     TASK_COMPLETED = "task.completed"
     TASK_FAILED = "task.failed"
+    TASK_CANCELLED = "task.cancelled"
 
     # Capability detection
     CAPABILITY_CHECK_STARTED = "capability.check_started"
@@ -43,6 +44,8 @@ class EventType(StrEnum):
     TOOL_REGISTERED = "tool.registered"
     TOOL_REJECTED = "tool.rejected"
     TOOL_DEPRECATED = "tool.deprecated"
+    TOOL_DISABLED = "tool.disabled"
+    TOOL_ENABLED = "tool.enabled"
     TOOL_EXECUTION_STARTED = "tool.execution_started"
     TOOL_EXECUTION_FINISHED = "tool.execution_finished"
 
@@ -67,6 +70,7 @@ class EventType(StrEnum):
     FAILURE_ANALYZED = "failure.analyzed"
     PLAN_REVISED = "plan.revised"
     TOOL_QUARANTINED = "tool.quarantined"
+    CAPABILITY_GAP_UNFILLABLE = "capability.gap_unfillable"
 
     # System
     SYSTEM_STARTED = "system.started"

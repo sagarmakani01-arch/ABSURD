@@ -1,17 +1,20 @@
 /** /app/tasks — task execution history + submission. */
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useCreateTask, useExecutions, useTasks } from '../../api/hooks'
+import { useCancelTask, useCreateTask, useExecutions, useTasks } from '../../api/hooks'
 import { PageHeader } from '../../app/AppUI'
 import { Button, Chip } from '../../components/ui/primitives'
 
 const toneFor = (status: string) =>
-  status === 'COMPLETED' ? 'ok' : status === 'FAILED' ? 'err' : status === 'CREATED' || status === 'ANALYZED' ? 'signal' : 'neutral'
+  status === 'COMPLETED' ? 'ok' : status === 'FAILED' ? 'err' : status === 'CANCELLED' ? 'warn' : status === 'CREATED' || status === 'ANALYZED' ? 'signal' : 'neutral'
+
+const TERMINAL = new Set(['COMPLETED', 'FAILED', 'CANCELLED'])
 
 export function Tasks() {
   const tasks = useTasks()
   const executions = useExecutions()
   const createTask = useCreateTask()
+  const cancelTask = useCancelTask()
   const [goal, setGoal] = useState('')
 
   const errorKind = (t: { error: Record<string, unknown> | null }) =>
@@ -94,6 +97,29 @@ export function Tasks() {
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       {kind && <Chip label={kind} tone="warn" />}
                       <Chip label={t.status} tone={toneFor(t.status)} />
+                      {!TERMINAL.has(t.status) && (
+                        <button
+                          type="button"
+                          disabled={cancelTask.isPending}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            cancelTask.mutate(t.id)
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid var(--line-1)',
+                            color: 'var(--warn)',
+                            borderRadius: 'var(--radius-1)',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: 'var(--fs-10)',
+                            padding: '3px 8px',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          CANCEL
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="sys-label" style={{ marginTop: 10 }}>

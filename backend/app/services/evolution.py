@@ -251,6 +251,17 @@ class EvolutionService:
         gap_edges = session.scalar(
             select(func.count()).select_from(KgEdge).where(KgEdge.relation == "requires")
         ) or 0
+        unfillable_gaps = session.scalar(
+            select(func.count()).select_from(KgEdge).where(KgEdge.relation == "unfillable")
+        ) or 0
+        tools_disabled = (
+            session.scalar(
+                select(func.count())
+                .select_from(ToolRecord)
+                .where(ToolRecord.disabled.is_(True))
+            )
+            or 0
+        )
 
         recent = bus.recent(500)
         revisions_total = sum(
@@ -268,15 +279,17 @@ class EvolutionService:
             "tasks_total": tasks_total,
             "tasks_failed": tasks_failed,
             "task_failure_rate": round(tasks_failed / tasks_total, 3) if tasks_total else 0.0,
-            "tools_registered": tools_registered,
+"tools_registered": tools_registered,
             "tools_generated": tools_generated,
+            "tools_quarantined": tools_quarantined,
+            "tools_disabled": tools_disabled,
             "generation_available": tool_generator.generate_available(),
             "generation_strategies": tool_generator.strategies(),
-            "tools_quarantined": tools_quarantined,
             "executions": executions,
             "experiences": experiences,
             "failures_by_kind": failures_by_kind,
             "gap_edges": gap_edges,
+            "unfillable_gaps": unfillable_gaps,
             "gap_close_rate": gap_close_rate,
             "revisions_total": revisions_total,
             "revision_available": llm_service.available,

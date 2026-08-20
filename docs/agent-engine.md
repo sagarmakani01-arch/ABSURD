@@ -1,5 +1,17 @@
 # ABSURD Agent Engine
 
+> **Status note (Phase 14):** the engine executes covered steps for real in
+> the sandbox, retries failed steps with a re-plan loop (`PLAN_REVISED`,
+> budget from the agent config or `ABSURD_REPLAN_MAX_RETRIES`), honours
+> cancellation between steps, and short-circuits gaps proven unfillable
+> (`capability.gap_unfillable` + `unfillable` KG edge). The capability
+> detector also performs **composition matching** — two registered tools can
+> cover one step when the outputs of the first feed the inputs of the second
+> (`composed: true`, both executions recorded). Agent configurations
+> (`GET/POST /agents`) select a planner strategy; only the implemented
+> strategies `split` and `flat` are accepted — anything else is an honest
+> `422 unsupported_strategy`.
+
 The Agent Engine is the cognitive core. It turns a high-level goal into a sequence of executable steps, decides whether existing tools can handle them, and reasons over outcomes. It is composed of three components: **Planner**, **Capability Detector**, and **Reasoner**.
 
 ```

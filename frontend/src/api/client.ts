@@ -75,6 +75,14 @@ export const api = {
   }) => json<import('../types/api').ToolDTO>('/tools/generate', body),
   toolTransition: (id: string, verb: 'verify' | 'activate' | 'reject' | 'deprecate') =>
     json<import('../types/api').ToolDTO>(`/tools/${id}/${verb}`, {}),
+  disableTool: (id: string) => json<import('../types/api').ToolDTO>(`/tools/${id}/disable`, {}),
+  enableTool: (id: string) => json<import('../types/api').ToolDTO>(`/tools/${id}/enable`, {}),
+  capabilities: () => request<import('../types/api').CapabilityDTO[]>('/capabilities'),
+
+  /* ---------------- agents ---------------- */
+  agents: () => request<import('../types/api').AgentDTO[]>('/agents'),
+  createAgent: (body: { name: string; planner_strategy?: string; max_retries?: number }) =>
+    json<import('../types/api').AgentDTO>('/agents', body),
 
   /* ---------------- tasks ---------------- */
   tasks: (params?: Record<string, string>) => {
@@ -84,6 +92,7 @@ export const api = {
   task: (id: string) => request<import('../types/api').TaskDTO>(`/tasks/${id}`),
   createTask: (body: { goal: string; context?: Record<string, unknown> }) =>
     json<import('../types/api').TaskDTO>('/tasks', body),
+  cancelTask: (id: string) => json<import('../types/api').TaskDTO>(`/tasks/${id}/cancel`, {}),
   executions: (taskId?: string) =>
     request<import('../types/api').ExecutionDTO[]>(`/executions${taskId ? `?task_id=${taskId}` : ''}`),
 

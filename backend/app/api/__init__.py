@@ -1,5 +1,6 @@
 """API routes."""
 
+from app.api.routes.agents import router as agents_router
 from app.api.routes.events import router as events_router
 from app.api.routes.evolution import router as evolution_router
 from app.api.routes.health import router as health_router
@@ -16,4 +17,5 @@ all_routers = [
     evaluation_router,
     memory_router,
     evolution_router,
+    agents_router,
 ]

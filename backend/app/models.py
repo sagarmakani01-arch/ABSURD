@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -39,6 +39,8 @@ class ToolRecord(Base):
     security_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     provenance: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     parent_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    disabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    confidence: Mapped[float] = mapped_column(Float, default=0.1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, server_default=func.now()
@@ -54,8 +56,28 @@ class TaskRecord(Base):
     goal: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(32), default="CREATED", index=True)
     context: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    agent_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, server_default=func.now()
+    )
+
+
+class AgentRecord(Base):
+    """An agent configuration: which plan strategy + retry budget a task uses.
+
+    Configuration only — the engine is deterministic and reads these values;
+    an agent never injects behavior it cannot perform.
+    """
+
+    __tablename__ = "agents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(256))
+    planner_strategy: Mapped[str] = mapped_column(String(32), default="split")
+    max_retries: Mapped[int] = mapped_column(default=2)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, server_default=func.now()

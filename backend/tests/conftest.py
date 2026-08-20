@@ -28,4 +28,7 @@ def _reset_db():
     bus.reset()
     llm_service.reset()
     semantic_service.reset()
+    from app.main import _rate_buckets  # noqa: PLC0415
+
+    _rate_buckets.clear()
     yield

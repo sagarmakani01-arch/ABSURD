@@ -1,5 +1,14 @@
 # ABSURD Evolution Loop
 
+> **Status note (Phase 14):** failure analysis also counts **unfillable
+> gaps** — capabilities whose generation has been refused
+> `ABSURD_UNFILLABLE_GAP_THRESHOLD` times are marked unfillable in the
+> knowledge graph, and later tasks over the same gap fail `NO_CAPABILITY`
+> with `ATTEMPTS` instead of seeding futile DRAFT candidates. Tool
+> executions now also feed **composition** results (chained tools count as
+> multi-step executions). Metrics include `tools_disabled` and
+> `unfillable_gaps`.
+
 The Evolution Loop is what makes ABSURD self-improving. Every tool execution outcome is either **registered** (success) or **analyzed** (failure); both paths write back into memory, which improves the next task's plan, capability coverage, and tool quality.
 
 ```

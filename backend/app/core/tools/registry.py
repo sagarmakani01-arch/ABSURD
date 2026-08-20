@@ -81,7 +81,21 @@ class ToolRegistry:
                 output_schema={k: str(v) for k, v in (r.output_schema or {}).items()},
             )
             for r in rows
+            if not r.disabled
         ]
+
+    def set_disabled(self, session: Session, tool: ToolRecord, disabled: bool) -> ToolRecord:
+        """Flip the planner-exclusion flag. Does not change lifecycle status."""
+        tool.disabled = disabled
+        tool.updated_at = datetime.now(timezone.utc)
+        session.add(tool)
+        session.commit()
+        session.refresh(tool)
+        bus.publish(
+            EventType.TOOL_DISABLED if disabled else EventType.TOOL_ENABLED,
+            {"tool_id": tool.id, "name": tool.name, "disabled": disabled},
+        )
+        return tool
 
     def get(self, session: Session, tool_id: str) -> ToolRecord | None:
         return session.get(ToolRecord, tool_id)

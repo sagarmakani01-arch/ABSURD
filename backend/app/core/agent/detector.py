@@ -64,6 +64,7 @@ class CapabilityEntry(BaseModel):
     matched_tool_ids: list[str] = Field(default_factory=list)
     gap_spec: GapSpec | None = None
     confidence: float = 0.5
+    composed: bool = False
 
 
 class CapabilityPlan(BaseModel):
@@ -139,6 +140,22 @@ class CapabilityDetector:
                 matched_tool_ids=[tool.id],
                 confidence=1.0,
             )
+
+        # No single tool finishes the step. Composition: an ordered chain
+        # (A, B) where A consumes the step's inputs and B produces the step's
+        # outputs, with A's outputs type-compatible with B's inputs.
+        if step.expected_inputs and step.expected_outputs:
+            chain = self._find_chain(step, tools)
+            if chain:
+                a, b = chain
+                return CapabilityEntry(
+                    step_id=step.id,
+                    coverage=Coverage.COVERED,
+                    matched_tool_ids=[a.id, b.id],
+                    confidence=0.9,
+                    composed=True,
+                )
+
         return CapabilityEntry(
             step_id=step.id,
             coverage=Coverage.PARTIAL,
@@ -146,6 +163,34 @@ class CapabilityDetector:
             gap_spec=self._gap_spec(step),
             confidence=0.7,
         )
+
+    def _find_chain(self, step: Step, tools: list[RegistryTool]) -> tuple[RegistryTool, RegistryTool] | None:
+        """First ordered pair whose schemas link into a full cover."""
+        for a in tools:
+            if not self._compatible(step.expected_inputs, a.input_schema):
+                continue
+            for b in tools:
+                if b.id == a.id:
+                    continue
+                if not self._chain_link(a.output_schema, b.input_schema):
+                    continue
+                if not self._compatible(step.expected_outputs, b.output_schema):
+                    continue
+                return (a, b)
+        return None
+
+    @staticmethod
+    def _chain_link(produced: dict[str, str], required: dict[str, str]) -> bool:
+        """Every key B needs must exist in A's outputs with a compatible type."""
+        if not produced or not required:
+            return False
+        for name, declared in required.items():
+            provided = produced.get(name)
+            if provided is None:
+                return False
+            if not CapabilityDetector._type_compatible(declared, provided):
+                return False
+        return True
 
     def _match_score(self, tool: RegistryTool, step: Step) -> int:
         """0 = no match; 1 = partial (lexical/IO half-match); 2 = full coverage.

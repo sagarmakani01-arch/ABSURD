@@ -131,11 +131,19 @@ def test_quarantine_after_consecutive_failures() -> None:
     client.post(f"/api/v1/tools/{tool['id']}/activate")
 
     goal = "use the crashing tool to add two numbers"
-    for _ in range(3):
+
+    # The retry loop (Phase 14) is honest: with the default max_retries=2 the
+    # FIRST task executes the crashing tool 3 times (3 consecutive failures)
+    # and quarantine fires inside that same task. Every later run finds the
+    # tool DEPRECATED and fails NO_CAPABILITY instead.
+    expectations = ["TOOL_EXECUTION_FAILED", "NO_CAPABILITY", "NO_CAPABILITY"]
+    for expected_kind in expectations:
         task = _submit(goal, {"inputs": [{"a": 1, "b": 2}]})
         assert task["status"] == "FAILED"
-        assert task["error"]["kind"] == "TOOL_EXECUTION_FAILED"
-        assert task["error"]["code"] == "runtime_error"
+        assert task["error"]["kind"] == expected_kind
+
+    first = client.get("/api/v1/tasks", params={"limit": 10}).json()[-1]
+    assert first["error"]["code"] == "runtime_error"
 
     fetched = client.get(f"/api/v1/tools/{tool['id']}").json()
     assert fetched["status"] == "DEPRECATED"

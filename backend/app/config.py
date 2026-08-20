@@ -32,3 +32,15 @@ EMBEDDINGS_API_TOKEN = os.getenv("ABSURD_EMBEDDINGS_API_TOKEN", "")
 EMBEDDINGS_MODEL = os.getenv("ABSURD_EMBEDDINGS_MODEL", "")
 EMBEDDINGS_TIMEOUT_SECONDS = float(os.getenv("ABSURD_EMBEDDINGS_TIMEOUT_SECONDS", "30"))
 EMBEDDING_THRESHOLD = float(os.getenv("ABSURD_EMBEDDING_THRESHOLD", "0.5"))
+
+# Convergence & maintenance (Phase 14).
+UNFILLABLE_GAP_THRESHOLD = int(os.getenv("ABSURD_UNFILLABLE_GAP_THRESHOLD", "2"))
+REPLAN_MAX_RETRIES = int(os.getenv("ABSURD_REPLAN_MAX_RETRIES", "2"))
+CONFIDENCE_DECAY_DAYS = int(os.getenv("ABSURD_CONFIDENCE_DECAY_DAYS", "30"))
+TOOL_RETENTION_DAYS = int(os.getenv("ABSURD_TOOL_RETENTION_DAYS", "180"))
+KG_PRUNE_DAYS = int(os.getenv("ABSURD_KG_PRUNE_DAYS", "90"))
+
+# Gateway hardening (Phase 14). Zero disables the limit/cap. Rate limiting
+# is opt-in: it protects a deployed gateway, not a local dev loop.
+RATE_LIMIT_PER_MINUTE = int(os.getenv("ABSURD_RATE_LIMIT_PER_MINUTE", "0"))
+MAX_REQUEST_BYTES = int(os.getenv("ABSURD_MAX_REQUEST_BYTES", "262144"))

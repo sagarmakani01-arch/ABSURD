@@ -125,8 +125,17 @@ but refuses everything it cannot prove safe:
 | Security sandbox + real tool execution | Implemented & tested |
 | Behavioral verification gate (`POST /evaluations`) | Implemented & tested |
 | REST + WS bearer auth | Implemented & tested (disabled when token empty) |
+| Gateway hardening (X-Request-ID, opt-in rate limit, payload cap) | Implemented & tested (rate limit off by default) |
+| WS task lifecycle (`ping`, `task.create`, `task.cancel`) | Implemented & tested |
+| Task cancellation (`POST /tasks/{id}/cancel`) | Implemented & tested |
+| Tool disable/enable + `GET /capabilities` coverage | Implemented & tested |
+| Agent configurations (planner strategy `split`/`flat`, retry budget) | Implemented & tested (other strategies reject with `unsupported_strategy`) |
+| Engine retry/re-plan loop with `PLAN_REVISED` events | Implemented & tested |
+| Composition matching (chained covers A→B) | Implemented & tested |
+| Unfillable-gap honesty (thresholded refusal, `capability_unfillable`) | Implemented & tested |
+| Maintenance sweeps: confidence decay, retention, KG pruning, PII redaction | Implemented & tested |
 
-Backend test suite: **79 passed** (`backend/tests`). Frontend: typecheck,
+Backend test suite: **107 passed** (`backend/tests`). Frontend: typecheck,
 lint and build green.
 
 ## GETTING STARTED
@@ -175,6 +184,13 @@ gateway. Tests: `cd backend && python -m pytest` from `backend/`.
 - Phase 13: sandboxed tool execution with real outcomes, behavioral
   verification gate, LLM-assisted generation/revisions, semantic embedding
   matching, and REST/WS bearer auth. **Done.**
+- Phase 14: gateway hardening (X-Request-ID, opt-in rate limiting, payload
+  caps), WS task lifecycle (`task.create`/`task.cancel`), task cancellation,
+  tool disable/enable + capability coverage view, agent configurations
+  (strategy + retry budget), engine retry/re-plan loop, composition matching
+  for chained covers, unfillable-gap honesty (thresholded refusal),
+  maintenance sweeps (confidence decay, retention, KG pruning, PII
+  redaction). **Done.**
 
 ## DOCS
 

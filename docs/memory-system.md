@@ -1,5 +1,13 @@
 # ABSURD Memory System
 
+> **Status note (Phase 14):** experience memory now **redacts PII** on write —
+> keys matching `password|secret|token|api key|authorization|credential` (at
+> any nesting depth) are stored as `"[REDACTED]"`. Tool memory carries a
+> confidence score per tool with an **decay sweep** (`apply_confidence_decay`),
+> and the knowledge graph gains an `unfillable` edge type
+> (`capability:<slug> -unfillable-> task:<id>`) plus a **prune sweep** that
+> drops stale edges. `run_maintenance` runs all sweeps at gateway startup.
+
 Three persistent stores that back every other component. Data in all three is written from the same event stream, keeping the stores mutually consistent.
 
 ```

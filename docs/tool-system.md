@@ -7,6 +7,16 @@
 > The **security sandbox** runs tool code for real — AST policy-gated
 > subprocess execution — and the **behavioral gate** executes a tool's stored
 > tests during evaluation. See §2–§4 below.
+>
+> **Status note (Phase 14):** tools can be **disabled** (`POST
+> /tools/{id}/disable`, re-enabled via `/enable`); disabled tools are
+> excluded from planning and surface in `GET /capabilities` as `disabled`.
+> Each tool carries a **confidence** score that the maintenance sweep halved
+> per unused window (`ABSURD_CONFIDENCE_DECAY_DAYS`); DEPRECATED tools older
+> than `ABSURD_TOOL_RETENTION_DAYS` are purged. Generation refuses stale
+> capabilities after `ABSURD_UNFILLABLE_GAP_THRESHOLD` rejections — the
+> refusal is a real error (`409 capability_unfillable`), never a pretend
+> success.
 
 The Tool System manages the lifecycle of tools: what exists, how new tools come into existence, and how they are executed safely. Consists of the **Registry**, **Tool Generator**, **Security Sandbox**, and **Tool Execution**.
 

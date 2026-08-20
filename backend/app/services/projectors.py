@@ -111,6 +111,19 @@ def _write_enables_edges(session: Session, event: Event) -> None:
         )
 
 
+def _write_task_cancelled(session: Session, event: Event) -> None:
+    task_id = str(event.payload.get("task_id", ""))
+    experience_memory.add(
+        session,
+        kind="task",
+        outcome="failure",
+        task_id=task_id,
+        input_data={"event_sequence": event.sequence},
+        result={"kind": "CANCELLED"},
+        lessons=["task cancelled before completion"],
+    )
+
+
 def _write_execution_experience(session: Session, event: Event) -> None:
     """Every finished tool execution becomes a `tool_execution` experience."""
     status = str(event.payload.get("status", ""))
@@ -138,6 +151,7 @@ def _write_execution_experience(session: Session, event: Event) -> None:
 _HANDLERS: dict[EventType, Callable[[Session, Event], None]] = {
     EventType.TASK_COMPLETED: _write_task_success,
     EventType.TASK_FAILED: _write_task_failure,
+    EventType.TASK_CANCELLED: _write_task_cancelled,
     EventType.CAPABILITY_GAP_DETECTED: _write_requires_edges,
     EventType.TOOL_REGISTERED: _write_enables_edges,
     EventType.TOOL_EXECUTION_FINISHED: _write_execution_experience,

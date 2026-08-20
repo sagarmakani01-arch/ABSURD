@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
@@ -60,7 +62,7 @@ def test_websocket_rejects_missing_token(auth_enabled) -> None:
 
 def test_websocket_accepts_query_token(auth_enabled) -> None:
     with client.websocket_connect("/ws?token=test-secret-token") as ws:
-        ws.send_text("hello")
+        ws.send_text(json.dumps({"type": "ping", "payload": {}}))
         assert ws.receive_json()["type"] == "pong"
 
 
@@ -68,5 +70,5 @@ def test_websocket_accepts_header_token(auth_enabled) -> None:
     with client.websocket_connect(
         "/ws", headers={"Authorization": "Bearer test-secret-token"}
     ) as ws:
-        ws.send_text("hello")
+        ws.send_text(json.dumps({"type": "ping", "payload": {}}))
         assert ws.receive_json()["type"] == "pong"

@@ -14,7 +14,7 @@ from app.core.tools.model import ToolStatus
 from app.core.tools.registry import RegistryError, tool_registry
 from app.db import get_session
 from app.models import ExecutionRecord, ToolRecord
-from app.services.generator import tool_generator
+from app.services.generator import GeneratorError, tool_generator
 from app.services.sandbox import MAX_TIMEOUT_SECONDS, sandbox
 
 router = APIRouter(tags=["tools"])
@@ -39,6 +39,8 @@ class ToolRead(BaseModel):
     description: str
     version: str
     status: str
+    disabled: bool
+    confidence: float
     input_schema: dict[str, object]
     output_schema: dict[str, object]
     source_code: str
@@ -129,17 +131,22 @@ def generate_tool(body: GenerateRequest, session: SessionDep) -> ToolRecord:
 
     Uses the deterministic template strategy; idempotent per capability slug.
     The candidate must still pass verify/activate before it closes a gap.
+    A capability declared unfillable (candidates rejected repeatedly) is
+    refused with 409 instead of generating again.
     """
-    tool, _created = tool_generator.generate(
-        session,
-        GapSpec(
-            name_hint=body.name_hint,
-            description=body.description,
-            input_schema=body.input_schema,
-            output_schema=body.output_schema,
-            security_constraints=body.security_constraints,
-        ),
-    )
+    try:
+        tool, _created = tool_generator.generate(
+            session,
+            GapSpec(
+                name_hint=body.name_hint,
+                description=body.description,
+                input_schema=body.input_schema,
+                output_schema=body.output_schema,
+                security_constraints=body.security_constraints,
+            ),
+        )
+    except GeneratorError as exc:
+        raise HTTPException(status_code=409, detail={"code": exc.code, "message": exc.message}) from exc
     return tool
 
 
@@ -178,6 +185,52 @@ def reject_tool(tool_id: str, session: SessionDep, _body: ToolAction | None = No
 @router.post("/tools/{tool_id}/deprecate", response_model=ToolRead)
 def deprecate_tool(tool_id: str, session: SessionDep, _body: ToolAction | None = None) -> ToolRecord:
     return _transition(_get_tool(session, tool_id), ToolStatus.DEPRECATED, session)
+
+
+@router.post("/tools/{tool_id}/disable", response_model=ToolRead)
+def disable_tool(tool_id: str, session: SessionDep, _body: ToolAction | None = None) -> ToolRecord:
+    """Exclude a tool from planning without changing its lifecycle status.
+
+    The detector never sees disabled tools; re-enable with
+    `POST /tools/{tool_id}/enable`.
+    """
+    return tool_registry.set_disabled(session, _get_tool(session, tool_id), True)
+
+
+@router.post("/tools/{tool_id}/enable", response_model=ToolRead)
+def enable_tool(tool_id: str, session: SessionDep, _body: ToolAction | None = None) -> ToolRecord:
+    """Re-include a disabled tool in planning."""
+    return tool_registry.set_disabled(session, _get_tool(session, tool_id), False)
+
+
+@router.get("/capabilities")
+def capabilities(session: SessionDep) -> list[dict[str, object]]:
+    """Aggregate view of tool coverage per capability domain.
+
+    Drives the Capability Detector's view: every capability declared by any
+    tool, with the count of tools declaring it, whether a REGISTERED and
+    non-disabled tool covers it, and the matching tool ids.
+    """
+    by_capability: dict[str, dict[str, object]] = {}
+    for tool in tool_registry.list(session):
+        for capability in tool.capabilities or []:
+            slot = by_capability.setdefault(
+                capability,
+                {
+                    "capability": capability,
+                    "tools_total": 0,
+                    "registered": [],
+                    "covered": False,
+                    "disabled": [],
+                },
+            )
+            slot["tools_total"] = int(slot["tools_total"]) + 1
+            if tool.status == ToolStatus.REGISTERED.value and not tool.disabled:
+                slot["registered"].append(tool.id)
+                slot["covered"] = True
+            elif tool.disabled:
+                slot["disabled"].append(tool.id)
+    return sorted(by_capability.values(), key=lambda slot: slot["capability"])
 
 
 @router.post("/tools/{tool_id}/execute", response_model=ExecutionRead)

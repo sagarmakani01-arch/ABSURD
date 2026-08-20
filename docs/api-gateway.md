@@ -1,14 +1,17 @@
 # ABSURD API Gateway
 
-> **Status note (Phase 11):** endpoints below marked *(implemented)* exist in
-> `backend/app/api/routes/`. All others are target spec — the gateway returns
-> 404 until a later phase. Implemented set: `health`, `events`, `tasks`
-> (POST `/tasks`, GET `/tasks`, GET `/tasks/{id}`, GET `/executions`), `tools`
-> (POST `/tools`, GET `/tools`, GET `/tools/{id}`, and the lifecycle verbs
-> `/verify`, `/activate`, `/reject`, `/deprecate`), `evaluations`
+> **Status note (Phase 14):** implemented endpoints live in
+> `backend/app/api/routes/` and are verified by `backend/tests/`. Implemented
+> set: `health`, `events`, `tasks` (POST `/tasks`, GET `/tasks`,
+> GET `/tasks/{id}`, POST `/tasks/{id}/cancel`, GET `/executions`), `tools`
+> (POST/GET `/tools`, GET `/tools/{id}`, lifecycle verbs `/verify`, `/activate`,
+> `/reject`, `/deprecate`, and `/disable` + `/enable`), `capabilities`
+> (GET `/capabilities`), `agents` (GET/POST `/agents`), `evaluations`
 > (POST `/evaluations`), `memory` (`/memory/experience`, `/memory/graph`,
 > `/memory/graph/coverage-gaps`, `/memory/tools-usage`), `evolution`
-> (`metrics`, `events`, `revisions`, `promotions`).
+> (`metrics`, `events`, `revisions`, `promotions`). The gateway also applies
+> X-Request-ID, opt-in per-IP rate limiting, and payload-size caps; the WS
+> bridge speaks the JSON protocol below.
 
 FastAPI gateway — the only entry point for the ABSURD UI. Exposes synchronous REST endpoints and a WebSocket endpoint for streaming/event delivery. It owns auth, request validation, and fan-out to the Agent Engine, Tool System, Memory System, and Evolution Loop.
 
@@ -75,14 +78,19 @@ FastAPI gateway — the only entry point for the ABSURD UI. Exposes synchronous 
 
 Endpoint: `ws://<host>/ws`
 
+Client messages are JSON envelopes `{"type": "...", "payload": {...}}`.
+Bare text frames are answered with an `error` frame (`bad_frame`).
+
 ### Client → Server Messages
 
 | `type` | Payload | Description |
 |---|---|---|
-| `task.create` | `{goal, context?, agent_id?}` | Submit a new task; gateway replies with `task.accepted`. |
-| `task.cancel` | `{task_id}` | Cancel running task. |
-| `subscribe.tool` | `{tool_id}` | Subscribe to execution/registration events for a tool. |
+| `task.create` | `{goal, context?, agent_id?}` | Submit a new task; runs it and replies `task.accepted` + `task.finished`. |
+| `task.cancel` | `{task_id}` | Cancel a running task; replies `task.cancelled`. |
 | `ping` | `{}` | Keepalive; gateway replies `pong`. |
+
+Unknown message types → `error {"code": "unknown_message"}`; malformed payloads
+→ `error` frames (e.g. `missing_goal`, `missing_task_id`).
 
 ### Server → Client Messages
 
@@ -91,15 +99,13 @@ Every message uses the envelope `{"type": "...", "payload": {...}}`.
 | `type` | Payload | Description |
 |---|---|---|
 | `task.accepted` | `{task_id}` | Task accepted into the pipeline. |
-| `task.update` | `{task_id, status, current_step?, progress?}` | Streamed progress (one per step transition). |
-| `task.result` | `{task_id, result, tool_trace[]}` | Final result with the list of tools used. |
-| `tool.executing` | `{tool_id, task_id}` | A tool began executing. |
-| `tool.registered` | `{tool_id, name, description, confidence}` | A generated tool was promoted to the registry. |
-| `evolution.event` | `{event_id, event_type, timestamp, payload}` | Evolution loop activity (see evolution-loop.md). |
-| `error` | `{code, message, request_id}` | Protocol or task error. |
+| `task.update` | `{task_id, status}` | Lifecycle update per transition (including `task.finished` on completion). |
+| `task.cancelled` | `{task_id, status}` | Cancellation acknowledged. |
+| `task_not_found` | `{task_id}` | Cancellation requested for an unknown task. |
+| `error` | `{code, message}` | Protocol or task error. |
 | `pong` | `{timestamp}` | Keepalive reply. |
 
-## 4. Authentication
+## 4. Authentication & Gateway Hardening
 
 - v1: static bearer token (env `ABSURD_API_TOKEN`), enforced by an HTTP
   middleware on every REST route and at WS accept (Phase 13f). REST requires
@@ -108,13 +114,26 @@ Every message uses the envelope `{"type": "...", "payload": {...}}`.
   `/api/v1/health`, and the API docs are exempt. Empty token = auth disabled.
 - Future: JWT with scopes (`task:read`, `task:write`, `tool:admin`, `memory:read`).
 - All auth failures → `401 {"detail": "unauthorized", "code": "auth.unauthorized"}` (WS: close 1008).
+- `X-Request-ID`: honored when the client sends one, generated otherwise;
+  echoed on the response and propagated as `state.request_id` to all
+  downstream events via the gateway middleware.
+- Rate limiting (Phase 14): sliding 60-second window per client IP, opt-in via
+  `ABSURD_RATE_LIMIT_PER_MINUTE` (default `0` = disabled). Exceeding the
+  window → `429 {"detail": ..., "code": "rate_limited"}`. `/health` and
+  `/api/v1/health` are exempt.
+- Payload cap (Phase 14): requests with a `Content-Length` above
+  `ABSURD_MAX_REQUEST_BYTES` (default 262144) → `413
+  {"detail": ..., "code": "payload_too_large"}`.
+- Custom status codes returned by the application layer: `409
+  capability_unfillable` (generation refused for a proven-unfillable gap),
+  `422 unsupported_strategy` (agent planner strategy not implemented),
+  `404 task_not_found`, `422 terminal_task` (cancelling a finished task).
 
 ## 5. Gateway Responsibilities (not the core logic)
 
 - Validation of incoming payloads against Pydantic schemas.
-- Authentication and request-id propagation.
+- Authentication, request-id propagation, rate limiting, and payload caps.
 - Routing: dispatch task work to the Agent Engine; fan out events to connected WS clients via an in-process event bus.
-- Rate limiting (per token/IP) and payload size caps on task bodies.
 - No business logic beyond orchestration — planner, tooling, memory, evolution all live in `core/`.
 
 ## 6. Example: Create Task (REST)

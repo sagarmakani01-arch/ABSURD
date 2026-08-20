@@ -1,7 +1,7 @@
 /** /app — main ABSURD environment. */
 import { Link } from 'react-router-dom'
 import { useEventStream } from '../../lib/useEventStream'
-import { useHealth, useTasks, useTools } from '../../api/hooks'
+import { useCapabilities, useHealth, useTasks, useTools } from '../../api/hooks'
 import { PageHeader } from '../../app/AppUI'
 
 export function Overview() {
@@ -9,6 +9,7 @@ export function Overview() {
   const { connected, events } = useEventStream()
   const tools = useTools()
   const tasks = useTasks()
+  const capabilities = useCapabilities()
 
   const lastEvents = [...events].reverse().slice(0, 8)
 
@@ -98,6 +99,36 @@ export function Overview() {
                   <span style={{ color: t.status === 'REGISTERED' ? 'var(--ok)' : 'var(--text-low)' }}>{t.status}</span>
                 </Link>
               ))}
+            </div>
+          )}
+        </div>
+
+        <div className="instr-panel" style={{ padding: 20 }}>
+          <div className="sys-label" style={{ marginBottom: 12 }}>CAPABILITY COVERAGE</div>
+          {capabilities.data === undefined ? (
+            <div className="sys-label" style={{ color: 'var(--text-low)' }}>LOADING…</div>
+          ) : capabilities.data.length === 0 ? (
+            <div className="sys-label" style={{ color: 'var(--text-low)' }}>
+              NO CAPABILITIES KNOWN YET
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {capabilities.data.slice(0, 5).map((c) => (
+                <div
+                  key={c.capability}
+                  style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-11)' }}
+                >
+                  <span style={{ color: 'var(--text-hi)', letterSpacing: '0.06em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {c.capability}
+                  </span>
+                  <span style={{ color: c.covered ? 'var(--ok)' : c.disabled.length > 0 ? 'var(--warn)' : 'var(--err)' }}>
+                    {c.covered ? 'COVERED' : c.disabled.length > 0 ? 'DISABLED' : 'GAP'}
+                  </span>
+                </div>
+              ))}
+              <div className="sys-label" style={{ color: 'var(--text-low)', marginTop: 6 }}>
+                {capabilities.data.filter((c) => c.covered).length} COVERED / {capabilities.data.length} TOTAL
+              </div>
             </div>
           )}
         </div>
