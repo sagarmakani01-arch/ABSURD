@@ -18,6 +18,7 @@ from app.api import all_routers
 from app.config import API_TOKEN, CORS_ORIGINS
 from app.db import init_db
 from app.events import Event, EventType, bus
+from app.services import projectors
 
 
 class WsBridge:
@@ -69,6 +70,21 @@ class WsBridge:
 
 
 bridge = WsBridge()
+
+# Memory projectors attach to the bus at import time (idempotent) so they are
+# active in every test process, not only under the lifespan lifecycle, and
+# need no event loop of their own.
+_projectors_installed = False
+
+
+def _install_projectors() -> None:
+    global _projectors_installed
+    if not _projectors_installed:
+        projectors.install()
+        _projectors_installed = True
+
+
+_install_projectors()
 
 
 @asynccontextmanager

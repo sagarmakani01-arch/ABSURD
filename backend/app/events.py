@@ -64,6 +64,9 @@ class EventType(StrEnum):
     TOOL_REVISION_FAILED = "evolution.revision_failed"
     TOOL_REVISION_IMPROVED = "evolution.revision_improved"
     TOOL_VERSION_PROMOTED = "evolution.version_promoted"
+    FAILURE_ANALYZED = "failure.analyzed"
+    PLAN_REVISED = "plan.revised"
+    TOOL_QUARANTINED = "tool.quarantined"
 
     # System
     SYSTEM_STARTED = "system.started"

@@ -78,3 +78,41 @@ class ExecutionRecord(Base):
     metrics: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ExperienceRecord(Base):
+    """Append-only Experience Memory: a time-series of what actually happened.
+
+    Written from the event stream (see event projectors in `app.events` wiring
+    in main.py). Kind is one of `task`, `step`, `tool_execution`; outcome is
+    `success` / `failure` / `partial`.
+    """
+
+    __tablename__ = "experiences"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), index=True)
+    task_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
+    input: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    outcome: Mapped[str] = mapped_column(String(32), index=True)
+    result: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    lessons: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class KgEdge(Base):
+    """One directed edge in the Knowledge Graph.
+
+    Node identities are plain strings (`tool:<id>`, `capability:<slug>`,
+    `task:<id>`). Relations follow the vocabulary in docs/memory-system.md:
+    `enables`, `covers`, `blocks`, `satisfies`, `depends_on`, `requires`.
+    """
+
+    __tablename__ = "kg_edges"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    subject: Mapped[str] = mapped_column(String(128), index=True)
+    relation: Mapped[str] = mapped_column(String(32), index=True)
+    target: Mapped[str] = mapped_column(String(128), index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
