@@ -33,12 +33,21 @@ class AgentEngine:
             {"task_id": task.id, "steps": len(plan.steps)},
         )
 
-        capabilities = self.detector.evaluate(plan, tool_registry.list_all(session))
+        capabilities = self.detector.evaluate(plan, tool_registry.registered_tools(session))
         for entry in capabilities.entries:
             if entry.coverage.value == "gap" and entry.gap_spec:
                 bus.publish(
                     EventType.CAPABILITY_MISSING,
                     {"task_id": task.id, "step_id": entry.step_id, "capability": entry.gap_spec.name_hint},
+                )
+            elif entry.coverage.value == "covered":
+                bus.publish(
+                    EventType.CAPABILITY_FOUND,
+                    {
+                        "task_id": task.id,
+                        "step_id": entry.step_id,
+                        "matched_tool_ids": entry.matched_tool_ids,
+                    },
                 )
 
         if capabilities.has_gap:
